@@ -476,36 +476,65 @@ const CandidateController = {
     }
   },
 
+  // getAllCandidates: async (req, res) => {
+  //   try {
+  //     const { page = 1, limit = 50, status, paymentStatus } = req.query;
+  //     let query = {};
+  //     if (status) query.status = status;
+  //     if (paymentStatus) query.paymentStatus = paymentStatus;
+  //     const candidates = await Candidate.find(query)
+  //       .limit(limit * 1)
+  //       .skip((page - 1) * limit)
+  //       .sort({ registrationDate: -1 });
+  //     const total = await Candidate.countDocuments(query);
+  //     res.json({
+  //       status: 'success',
+  //       candidates,
+  //       pagination: {
+  //         currentPage: page,
+  //         totalPages: Math.ceil(total / limit),
+  //         totalCandidates: total,
+  //         hasNextPage: page * limit < total,
+  //         hasPrevPage: page > 1
+  //       }
+  //     });
+  //   } catch (error) {
+  //     console.error('Error fetching candidates:', error);
+  //     res.status(500).json({
+  //       status: 'error',
+  //       message: error.message
+  //     });
+  //   }
+  // },
   getAllCandidates: async (req, res) => {
-    try {
-      const { page = 1, limit = 50, status, paymentStatus } = req.query;
-      let query = {};
-      if (status) query.status = status;
-      if (paymentStatus) query.paymentStatus = paymentStatus;
-      const candidates = await Candidate.find(query)
-        .limit(limit * 1)
-        .skip((page - 1) * limit)
-        .sort({ registrationDate: -1 });
-      const total = await Candidate.countDocuments(query);
-      res.json({
-        status: 'success',
-        candidates,
-        pagination: {
-          currentPage: page,
-          totalPages: Math.ceil(total / limit),
-          totalCandidates: total,
-          hasNextPage: page * limit < total,
-          hasPrevPage: page > 1
-        }
-      });
-    } catch (error) {
-      console.error('Error fetching candidates:', error);
-      res.status(500).json({
-        status: 'error',
-        message: error.message
-      });
-    }
-  },
+  try {
+    const { status, paymentStatus } = req.query;
+
+    // Build dynamic filter
+    let query = {};
+    if (status) query.status = status;
+    if (paymentStatus) query.paymentStatus = paymentStatus;
+
+    // Fetch all candidates — latest first
+    const candidates = await Candidate.find(query)
+      .sort({ registrationDate: -1 }); // descending = latest first
+
+    res.json({
+      status: 'success',
+      candidates,
+      totalCandidates: candidates.length,
+      message: 'All candidates fetched successfully (latest first)',
+    });
+
+  } catch (error) {
+    console.error('Error fetching candidates:', error);
+    res.status(500).json({
+      status: 'error',
+      message: error.message,
+    });
+  }
+},
+
 
   getCandidateById: async (req, res) => {
     try {
