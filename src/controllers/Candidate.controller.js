@@ -61,6 +61,7 @@ const CandidateController = {
         collegeOrWorking: formData.collegeOrWorking,
         companyName: formData.companyName,
         whatsappNumber: normalizedNumber,
+        howDidYouKnow: formData.howDidYouKnow,
         paymentStatus: "Pending",
         orderId: order.id,
         paymentAmount: parseFloat(amount) / 100,
@@ -162,6 +163,7 @@ const CandidateController = {
         collegeOrWorking: formData.collegeOrWorking,
         companyName: formData.companyName,
         whatsappNumber: normalizedNumber,
+        howDidYouKnow: formData.howDidYouKnow,
         paymentStatus: "Pending",
         orderId: order.id,
         paymentAmount: parseFloat(amount) / 100,
@@ -188,7 +190,7 @@ const CandidateController = {
     
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
     
-    console.log("🔍 Looking for candidate with orderId:", razorpay_order_id);
+    console.log(" Looking for candidate with orderId:", razorpay_order_id);
     
     const hmac = crypto.createHmac("sha256", process.env.RAZORPAY_KEY_SECRET);
     hmac.update(`${razorpay_order_id}|${razorpay_payment_id}`);
@@ -223,17 +225,26 @@ const CandidateController = {
       await candidate.save();
 
       if (!candidate.whatsappNumber) {
-    console.error(`Cannot send WhatsApp: candidate.whatsappNumber is missing for ${candidate._id}`);
+    console.error(`❌ Cannot send WhatsApp: candidate.whatsappNumber is missing for ${candidate._id}`);
 } else {
     try {
-        const templateId = candidate.collegeOrWorking === 'College' 
-            ? "66ab1b5c-f2df-4fd7-b8dc-1ea139a1f35e" 
-            : "62641f1e-aad7-4c96-933d-b0de01d2ee4c";
-        console.log(` Sending WhatsApp using template ${templateId} to ${candidate.whatsappNumber}`);
+        // Template selection based on registration type
+        let templateId;
+        if (candidate.collegeOrWorking === 'Working') {
+            // For ₹1200/- Registration (Working professionals)
+            templateId = "62641f1e-aad7-4c96-933d-b0de01d2ee4c";
+            console.log(`💼 Using ₹1200 working professional template for ${candidate.name}`);
+        } else {
+            // For students - common message irrespective of boy/girl
+            templateId = "66ab1b5c-f2df-4fd7-b8dc-1ea139a1f35e";
+            console.log(`🎓 Using common student registration template for ${candidate.name}`);
+        }
+        
+        console.log(`📤 Sending registration WhatsApp using template ${templateId} to ${candidate.whatsappNumber}`);
         await sendWhatsappGupshup(candidate, [candidate.name], templateId);
-        console.log(`WhatsApp sent successfully to ${candidate._id}`);
+        console.log(`✅ Registration WhatsApp sent successfully to ${candidate._id}`);
     } catch (error) {
-        console.error(`Failed to send WhatsApp to ${candidate._id}:`, error);
+        console.error(`❌ Failed to send registration WhatsApp to ${candidate._id}:`, error);
     }
 }
 
@@ -891,7 +902,19 @@ verifyPaymentForExistingCandidate: async (req, res) => {
       }
       console.log(` Payment verified for ${candidate.name}: ${razorpay_payment_id}`);
       try {
-        await sendWhatsappGupshup(candidate);
+        // Template selection based on registration type
+        let templateId;
+        if (candidate.collegeOrWorking === 'Working') {
+          // For ₹1200/- Registration (Working professionals)
+          templateId = "62641f1e-aad7-4c96-933d-b0de01d2ee4c";
+          console.log(`💼 Using ₹1200 working professional template for ${candidate.name}`);
+        } else {
+          // For students - common message irrespective of boy/girl
+          templateId = "66ab1b5c-f2df-4fd7-b8dc-1ea139a1f35e";
+          console.log(`🎓 Using common student registration template for ${candidate.name}`);
+        }
+        
+        await sendWhatsappGupshup(candidate, [candidate.name], templateId);
         console.log(` WhatsApp sent to ${candidate.name}`);
       } catch (whatsappError) {
         console.error(' WhatsApp sending failed:', whatsappError);
@@ -919,7 +942,7 @@ verifyPaymentForExistingCandidate: async (req, res) => {
 
 checkPendingPayments: async (req, res) => {
   try {
-    console.log("🔍 Checking all pending payments...");
+    //console.log("🔍 Checking all pending payments...");
     
     
     const pendingCandidates = await Candidate.find({
@@ -930,7 +953,7 @@ checkPendingPayments: async (req, res) => {
       ]
     });
 
-    console.log(`📊 Found ${pendingCandidates.length} pending payments to check`);
+   // console.log(`📊 Found ${pendingCandidates.length} pending payments to check`);
     
     let updatedCount = 0;
     const results = [];
@@ -955,7 +978,7 @@ checkPendingPayments: async (req, res) => {
             const orderPayments = await razorpay.orders.fetchPayments(candidate.orderId);
             if (orderPayments.items && orderPayments.items.length > 0) {
               payment = orderPayments.items[0]; 
-              console.log(`💳 Found payment via order for ${candidate.name}: ${payment.status}`);
+             // console.log(`💳 Found payment via order for ${candidate.name}: ${payment.status}`);
             }
           } catch (err) {
             console.log(`⚠️ Could not fetch order payments for ${candidate.name}: ${err.message}`);
@@ -978,7 +1001,19 @@ checkPendingPayments: async (req, res) => {
         
           if (candidate.whatsappNumber) {
             try {
-              await sendWhatsappGupshup(candidate);
+              // Template selection based on registration type
+              let templateId;
+              if (candidate.collegeOrWorking === 'Working') {
+                // For ₹1200/- Registration (Working professionals)
+                templateId = "62641f1e-aad7-4c96-933d-b0de01d2ee4c";
+                console.log(`💼 Using ₹1200 working professional template for ${candidate.name}`);
+              } else {
+                // For students - common message irrespective of boy/girl
+                templateId = "66ab1b5c-f2df-4fd7-b8dc-1ea139a1f35e";
+                console.log(`🎓 Using common student registration template for ${candidate.name}`);
+              }
+              
+              await sendWhatsappGupshup(candidate, [candidate.name], templateId);
               console.log(`📱 WhatsApp sent to ${candidate.whatsappNumber}`);
               results.push({
                 id: candidate._id,
@@ -1180,7 +1215,19 @@ verifyPaymentId: async (req, res) => {
        
           if (candidate.whatsappNumber) {
             try {
-              await sendWhatsappGupshup(candidate);
+              // Template selection based on registration type
+              let templateId;
+              if (candidate.collegeOrWorking === 'Working') {
+                // For ₹1200/- Registration (Working professionals)
+                templateId = "62641f1e-aad7-4c96-933d-b0de01d2ee4c";
+                console.log(`💼 Using ₹1200 working professional template for ${candidate.name}`);
+              } else {
+                // For students - common message irrespective of boy/girl
+                templateId = "66ab1b5c-f2df-4fd7-b8dc-1ea139a1f35e";
+                console.log(`🎓 Using common student registration template for ${candidate.name}`);
+              }
+              
+              await sendWhatsappGupshup(candidate, [candidate.name], templateId);
               console.log(" WhatsApp message sent to:", candidate.whatsappNumber);
             } catch (whatsappError) {
               console.error(" WhatsApp sending failed:", whatsappError);

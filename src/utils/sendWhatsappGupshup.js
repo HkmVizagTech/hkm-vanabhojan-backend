@@ -258,23 +258,21 @@ async function sendWhatsappGupshup(candidate, templateParams = [candidate.name],
       // Determine template ID
       let templateId = templateIdOverride;
       if (!templateId) {
-        switch ((candidate.collegeOrWorking || '').trim().toLowerCase()) {
-          case 'college': 
-            templateId = '66ab1b5c-f2df-4fd7-b8dc-1ea139a1f35e'; 
-            console.log('🚹 Using male template');
-            break;
-          case 'working': 
-            templateId = '62641f1e-aad7-4c96-933d-b0de01d2ee4c'; 
-            console.log('🚺 Using female template');
-            break;
-          default: 
-            templateId = 'f248fb66-c4f2-4367-ae4a-243db76b3d1b';
-            console.log('⚪ Using default template');
+        // Template selection for registration confirmation
+        if (candidate.collegeOrWorking === 'Working') {
+          // For ₹1200/- Registration (Working professionals)
+          templateId = '62641f1e-aad7-4c96-933d-b0de01d2ee4c'; 
+          console.log('💼 Using ₹1200 working professional template');
+        } else {
+          // For students - common template irrespective of boy/girl
+          templateId = '66ab1b5c-f2df-4fd7-b8dc-1ea139a1f35e'; 
+          console.log('🎓 Using common student registration template');
         }
       }
 
       if (gupshup && gupshup.sendingTextTemplate) {
-        // Use Gupshup SDK
+        // Use Gupshup SDK (this is the ONLY working method)
+        console.log('🔄 Using Gupshup SDK for template messaging...');
         const message = await gupshup.sendingTextTemplate({
           template: { id: templateId, params: templateParams },
           'src.name': 'Production',
@@ -287,30 +285,9 @@ async function sendWhatsappGupshup(candidate, templateParams = [candidate.name],
         console.log('✅ Template message sent via SDK:', message.data);
         return message.data;
       } else {
-        // Use direct axios for template messaging
-        console.log('🔄 Using direct axios for template messaging...');
-        
-        const templatePayload = {
-          channel: 'whatsapp',
-          source: GUPSHUP_SOURCE,
-          destination: normalizedNumber,
-          'src.name': 'Production',
-          template: JSON.stringify({
-            id: templateId,
-            params: templateParams
-          })
-        };
-
-        const response = await axios.post('https://api.gupshup.io/sm/api/v1/template/msg', templatePayload, {
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': GUPSHUP_API_KEY
-          },
-          timeout: 30000
-        });
-
-        console.log('✅ Template message sent via axios:', response.data);
-        return response.data;
+        // SDK not available - this is a configuration issue
+        console.error('❌ Gupshup SDK not available - cannot send template messages');
+        throw new Error('Gupshup SDK is required but not available. Please install @api/gupshup package.');
       }
     }
   } catch (err) {

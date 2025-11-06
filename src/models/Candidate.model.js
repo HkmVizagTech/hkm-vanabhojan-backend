@@ -13,6 +13,7 @@ const candidateSchema = new mongoose.Schema({
   dob: { type: Date },
   registrationDate: { type: Date, default: Date.now },
   whatsappNumber: { type: String, required: true },
+  howDidYouKnow: { type: String },
 
   paymentStatus: {
     type: String,
