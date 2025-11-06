@@ -338,20 +338,30 @@ const CandidateController = {
             orderId: savedCandidate.orderId
           });
 
-        
-          // if (!candidate.whatsappNumber) {
-          //   console.error(" Cannot send WhatsApp: whatsappNumber is missing for", candidate._id);
-          // } else {
-          //   try {
-      
-          //   console.log(` Sending WhatsApp using template hellonm ${templateId} to ${candidate.whatsappNumber}`);
-          //     await sendWhatsappGupshup(candidate,[candidate.name], templateId);
-
-          //     console.log(" WhatsApp message sent successfully to:", candidate.whatsappNumber);
-          //   } catch (whatsappError) {
-          //     console.error(" WhatsApp sending failed:", whatsappError.message);
-          //   }
-          // }
+          // Send WhatsApp notification
+          if (!candidate.whatsappNumber) {
+            console.error(`❌ Cannot send WhatsApp: whatsappNumber is missing for ${candidate._id}`);
+          } else {
+            try {
+              // Template selection based on registration type
+              let templateId;
+              if (candidate.collegeOrWorking === 'Working') {
+                // For ₹1200/- Registration (Working professionals)
+                templateId = "62641f1e-aad7-4c96-933d-b0de01d2ee4c";
+                console.log(`💼 Using ₹1200 working professional template for ${candidate.name}`);
+              } else {
+                // For students - common message irrespective of boy/girl
+                templateId = "66ab1b5c-f2df-4fd7-b8dc-1ea139a1f35e";
+                console.log(`🎓 Using common student registration template for ${candidate.name}`);
+              }
+              
+              console.log(`📤 Sending registration WhatsApp using template ${templateId} to ${candidate.whatsappNumber}`);
+              await sendWhatsappGupshup(candidate, [candidate.name], templateId);
+              console.log(`✅ Registration WhatsApp sent successfully to ${candidate._id}`);
+            } catch (whatsappError) {
+              console.error(`❌ Failed to send registration WhatsApp to ${candidate._id}:`, whatsappError);
+            }
+          }
         } else {
           console.log(" Payment already processed for:", candidate.name, "- Status:", candidate.paymentStatus);
         }
