@@ -105,36 +105,49 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 
+let isPaymentCheckRunning = false;
+
 const startAutomaticPaymentChecker = () => {
   console.log('🤖 Starting automatic payment status checker...');
   
-
-  cron.schedule('*/10 * * * * *', async () => {
+  // Run every 2 minutes instead of 30 seconds to avoid blocking
+  cron.schedule('*/2 * * * *', async () => {
+    if (isPaymentCheckRunning) {
+      console.log(' Payment check already running, skipping this cycle');
+      return;
+    }
+    
+    isPaymentCheckRunning = true;
     try {
       console.log(' Auto-checking pending payments...', new Date().toISOString());
       
       const { CandidateController } = require('./src/controllers/Candidate.controller');
       
-
-      const mockReq = { user: { role: 'admin' } };
+      // Create a lightweight request for auto-checking
+      const mockReq = { 
+        user: { role: 'admin' },
+        query: { limit: 50 } // Process only 50 payments at a time
+      };
       const mockRes = {
         json: (data) => {
           if (data.totalUpdated > 0) {
-            console.log(` Auto-updated ${data.totalUpdated} payments automatically`);
+            console.log(` ✅ Auto-updated ${data.totalUpdated} payments automatically`);
           } else {
-            console.log(' No pending payments to update');
+            console.log(' ⏱️ No pending payments to update');
           }
         },
         status: (code) => ({
           json: (data) => {
-            console.log(` Auto-payment check error (${code}):`, data.message);
+            console.log(` ❌ Auto-payment check error (${code}):`, data.message);
           }
         })
       };
       
       await CandidateController.checkPendingPayments(mockReq, mockRes);
     } catch (error) {
-      console.error(' Auto payment check failed:', error.message);
+      console.error(' ❌ Auto payment check failed:', error.message);
+    } finally {
+      isPaymentCheckRunning = false;
     }
   });
 };
@@ -152,7 +165,7 @@ const server = app.listen(PORT, '0.0.0.0', () => {
       
       setTimeout(() => {
         startAutomaticPaymentChecker();
-        console.log('🤖 Automatic payment checker started - will run every 10 seconds');
+        console.log('🤖 Automatic payment checker started - will run every 2 minutes');
       }, 5000); 
       
     })

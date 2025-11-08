@@ -1083,13 +1083,25 @@ checkPendingPayments: async (req, res) => {
   try {
     console.log("🔍 Comprehensive payment check starting...");
     
-    // Find all pending candidates with orderIds (even without paymentIds)
-    const pendingCandidates = await Candidate.find({
+    // Get limit from query params (for automatic runs) or process all (for manual runs)
+    const limit = req.query?.limit ? parseInt(req.query.limit) : undefined;
+    const isAutomatic = !!limit;
+    
+    // Find pending candidates with orderIds
+    let query = Candidate.find({
       paymentStatus: 'Pending',
       orderId: { $exists: true, $ne: null }
     });
+    
+    // Apply limit for automatic runs to prevent blocking
+    if (limit) {
+      query = query.limit(limit).sort({ createdAt: -1 }); // Most recent first
+    }
+    
+    const pendingCandidates = await query;
 
-    console.log(`📊 Found ${pendingCandidates.length} pending payments to check`);
+    const totalMsg = limit ? `${pendingCandidates.length} recent pending payments (limited)` : `${pendingCandidates.length} pending payments`;
+    console.log(`📊 Found ${totalMsg} to check`);
     
     let updatedCount = 0;
     const results = [];
