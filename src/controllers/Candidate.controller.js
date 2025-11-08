@@ -952,18 +952,15 @@ verifyPaymentForExistingCandidate: async (req, res) => {
 
 checkPendingPayments: async (req, res) => {
   try {
-    //console.log("🔍 Checking all pending payments...");
+    console.log("🔍 Comprehensive payment check starting...");
     
-    
+    // Find all pending candidates with orderIds (even without paymentIds)
     const pendingCandidates = await Candidate.find({
       paymentStatus: 'Pending',
-      $or: [
-        { paymentId: { $exists: true, $ne: null } },
-        { orderId: { $exists: true, $ne: null } }
-      ]
+      orderId: { $exists: true, $ne: null }
     });
 
-   // console.log(`📊 Found ${pendingCandidates.length} pending payments to check`);
+    console.log(`📊 Found ${pendingCandidates.length} pending payments to check`);
     
     let updatedCount = 0;
     const results = [];
@@ -972,55 +969,77 @@ checkPendingPayments: async (req, res) => {
       try {
         let payment = null;
         
-       
+        // Method 1: Try to fetch by existing paymentId (if available)
         if (candidate.paymentId) {
           try {
             payment = await razorpay.payments.fetch(candidate.paymentId);
-            console.log(`💳 Razorpay payment status for ${candidate.name}: ${payment.status}`);
+            console.log(`💳 [Method 1] Payment status for ${candidate.name}: ${payment.status}`);
           } catch (err) {
-            console.log(`⚠️ Could not fetch payment by ID for ${candidate.name}: ${err.message}`);
+            console.log(`⚠️ [Method 1] Could not fetch payment by ID for ${candidate.name}: ${err.message}`);
           }
         }
         
-      
+        // Method 2: Fetch all payments for this order (ENHANCED - This is the key fix!)
         if (!payment && candidate.orderId) {
           try {
             const orderPayments = await razorpay.orders.fetchPayments(candidate.orderId);
             if (orderPayments.items && orderPayments.items.length > 0) {
-              payment = orderPayments.items[0]; 
-             // console.log(`💳 Found payment via order for ${candidate.name}: ${payment.status}`);
+              // Find the captured payment
+              payment = orderPayments.items.find(p => p.status === 'captured') || orderPayments.items[0];
+              console.log(`💳 [Method 2] Found payment via order for ${candidate.name}: ${payment.status} (ID: ${payment.id})`);
             }
           } catch (err) {
-            console.log(`⚠️ Could not fetch order payments for ${candidate.name}: ${err.message}`);
+            console.log(`⚠️ [Method 2] Could not fetch order payments for ${candidate.name}: ${err.message}`);
           }
         }
         
+        // Method 3: If still no payment, try to fetch order details
+        if (!payment && candidate.orderId) {
+          try {
+            const order = await razorpay.orders.fetch(candidate.orderId);
+            console.log(`📋 [Method 3] Order details for ${candidate.name}: status=${order.status}, amount_paid=${order.amount_paid}, amount=${order.amount}`);
+            
+            // Check if order is paid but we haven't found the payment yet
+            if (order.amount_paid > 0 && order.amount_paid === order.amount) {
+              console.log(`✅ [Method 3] Order appears fully paid for ${candidate.name}, will re-fetch payments`);
+              // Try fetching payments again after a brief delay
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              const retryPayments = await razorpay.orders.fetchPayments(candidate.orderId);
+              if (retryPayments.items && retryPayments.items.length > 0) {
+                payment = retryPayments.items.find(p => p.status === 'captured') || retryPayments.items[0];
+                console.log(`💳 [Method 3] Retry found payment: ${payment.status} (ID: ${payment.id})`);
+              }
+            }
+          } catch (err) {
+            console.log(`⚠️ [Method 3] Could not fetch order details for ${candidate.name}: ${err.message}`);
+          }
+        }
+        
+        // Update candidate if payment found and captured
         if (payment && payment.status === 'captured') {
-          console.log(`✅ Updating payment status for ${candidate.name}`);
+          console.log(`✅ UPDATING payment status for ${candidate.name} - Payment ID: ${payment.id}`);
           
           candidate.paymentStatus = 'Paid';
           candidate.paymentId = payment.id;
           candidate.paymentDate = new Date(payment.created_at * 1000);
           candidate.paymentMethod = payment.method || 'Online';
-          candidate.paymentUpdatedBy = 'manual_check';
+          candidate.paymentUpdatedBy = 'enhanced_auto_check';
           candidate.razorpayPaymentData = payment;
           
           await candidate.save();
           updatedCount++;
           
-        
+          // Send WhatsApp notification
           if (candidate.whatsappNumber) {
             try {
               // Template selection based on registration type
               let templateId;
               if (candidate.collegeOrWorking === 'Working') {
-                // For ₹1200/- Registration (Working professionals)
                 templateId = "62641f1e-aad7-4c96-933d-b0de01d2ee4c";
-                console.log(`💼 Using ₹1200 working professional template for ${candidate.name}`);
+                console.log(`💼 Using working professional template for ${candidate.name}`);
               } else {
-                // For students - common message irrespective of boy/girl
                 templateId = "66ab1b5c-f2df-4fd7-b8dc-1ea139a1f35e";
-                console.log(`🎓 Using common student registration template for ${candidate.name}`);
+                console.log(`🎓 Using student template for ${candidate.name}`);
               }
               
               await sendWhatsappGupshup(candidate, [candidate.name], templateId);

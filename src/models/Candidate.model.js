@@ -52,7 +52,7 @@ const candidateSchema = new mongoose.Schema({
   certificateDriveViewLink: { type: String },
   certificateFileName: { type: String },
 
-  paymentUpdatedBy: { type: String, enum: ['manual', 'webhook', 'manual_check', 'manual_verification'], default: 'manual' },
+  paymentUpdatedBy: { type: String, enum: ['manual', 'webhook', 'manual_check', 'manual_verification', 'enhanced_auto_check'], default: 'manual' },
   razorpayPaymentData: { type: mongoose.Schema.Types.Mixed },
   adminAction: { type: String, enum: ['Accepted', 'Rejected', 'Refunded'], default: null },
   adminActionDate: { type: Date },
