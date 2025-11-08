@@ -22,6 +22,8 @@ CandidateRouter.post('/resend-certificate', authenticateToken, requireRole(['adm
 CandidateRouter.post('/create-order', CandidateController.createOrder);   
 CandidateRouter.post('/create-order-with-file', upload.single('studentIdCard'), CandidateController.createOrderWithFile);
 CandidateRouter.post('/verify-payment', CandidateController.verifyPayment); 
+CandidateRouter.post('/verify-payment-immediately', CandidateController.verifyPaymentImmediately);
+CandidateRouter.post('/check-pending-payments', CandidateController.checkPendingPayments);
 CandidateRouter.post('/', CandidateController.createCandidate);           
 CandidateRouter.post("/mark-attendance", CandidateController.markAttendance);
 CandidateRouter.post('/admin/attendance-scan', authenticateToken, requireRole(['admin', 'user']), CandidateController.adminAttendanceScan);

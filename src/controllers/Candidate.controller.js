@@ -949,6 +949,135 @@ verifyPaymentForExistingCandidate: async (req, res) => {
   }
 },
 
+// Immediate payment verification - checks a specific payment right after completion
+verifyPaymentImmediately: async (req, res) => {
+  console.log("🚀 Immediate payment verification starting...");
+  const { orderId, paymentId } = req.body;
+  
+  if (!orderId && !paymentId) {
+    return res.status(400).json({
+      success: false,
+      message: "Either orderId or paymentId is required"
+    });
+  }
+
+  try {
+    let candidate = null;
+    let paymentVerified = false;
+
+    // Find candidate by orderId or paymentId
+    if (orderId) {
+      candidate = await Candidate.findOne({ orderId: orderId });
+    } else if (paymentId) {
+      candidate = await Candidate.findOne({ paymentId: paymentId });
+    }
+
+    if (!candidate) {
+      console.log(`❌ No candidate found for orderId: ${orderId}, paymentId: ${paymentId}`);
+      return res.status(404).json({
+        success: false,
+        message: "Candidate not found"
+      });
+    }
+
+    console.log(`🔍 Checking payment for: ${candidate.name}`);
+
+    // Method 1: Check specific payment ID if provided
+    if (paymentId) {
+      try {
+        const payment = await razorpay.payments.fetch(paymentId);
+        if (payment && payment.status === 'captured') {
+          console.log(`💳 [Immediate] Payment verified for ${candidate.name}: ${payment.status} (ID: ${payment.id})`);
+          candidate.paymentStatus = "Paid";
+          candidate.paymentId = payment.id;
+          candidate.paymentUpdatedBy = "immediate_verification";
+          candidate.paymentVerifiedAt = new Date();
+          await candidate.save();
+          paymentVerified = true;
+
+          // Send WhatsApp notification
+          try {
+            await sendWhatsappGupshup.sendNotification(candidate.whatsappNumber, 'payment_success_template', {
+              name: candidate.name,
+              amount: candidate.paymentAmount.toString(),
+              orderId: candidate.orderId
+            });
+            console.log(`📱 WhatsApp sent to ${candidate.name} for immediate verification`);
+          } catch (whatsappError) {
+            console.error(`📱 WhatsApp failed for ${candidate.name}:`, whatsappError.message);
+          }
+        }
+      } catch (error) {
+        console.log(`⚠️ [Immediate] Could not fetch payment ${paymentId}: ${error.message}`);
+      }
+    }
+
+    // Method 2: Check order payments if not verified yet
+    if (!paymentVerified && candidate.orderId) {
+      try {
+        const orderPayments = await razorpay.orders.fetchPayments(candidate.orderId);
+        if (orderPayments && orderPayments.items && orderPayments.items.length > 0) {
+          const capturedPayment = orderPayments.items.find(payment => payment.status === 'captured');
+          if (capturedPayment) {
+            console.log(`💳 [Immediate] Found payment via order for ${candidate.name}: ${capturedPayment.status} (ID: ${capturedPayment.id})`);
+            candidate.paymentStatus = "Paid";
+            candidate.paymentId = capturedPayment.id;
+            candidate.paymentUpdatedBy = "immediate_verification";
+            candidate.paymentVerifiedAt = new Date();
+            await candidate.save();
+            paymentVerified = true;
+
+            // Send WhatsApp notification
+            try {
+              await sendWhatsappGupshup.sendNotification(candidate.whatsappNumber, 'payment_success_template', {
+                name: candidate.name,
+                amount: candidate.paymentAmount.toString(),
+                orderId: candidate.orderId
+              });
+              console.log(`📱 WhatsApp sent to ${candidate.name} for immediate verification`);
+            } catch (whatsappError) {
+              console.error(`📱 WhatsApp failed for ${candidate.name}:`, whatsappError.message);
+            }
+          }
+        }
+      } catch (error) {
+        console.log(`⚠️ [Immediate] Could not fetch order payments: ${error.message}`);
+      }
+    }
+
+    if (paymentVerified) {
+      return res.json({
+        success: true,
+        message: "Payment verified and updated successfully",
+        candidate: {
+          name: candidate.name,
+          paymentStatus: candidate.paymentStatus,
+          paymentId: candidate.paymentId,
+          orderId: candidate.orderId
+        }
+      });
+    } else {
+      return res.json({
+        success: false,
+        message: "Payment not found or not captured yet",
+        candidate: {
+          name: candidate.name,
+          paymentStatus: candidate.paymentStatus,
+          orderId: candidate.orderId
+        }
+      });
+    }
+
+  } catch (error) {
+    console.error("❌ Error in immediate payment verification:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error verifying payment",
+      error: error.message
+    });
+  }
+},
+
 
 checkPendingPayments: async (req, res) => {
   try {
