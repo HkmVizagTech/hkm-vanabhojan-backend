@@ -667,7 +667,7 @@ markAttendance: async (req, res) => {
   const { whatsappNumber } = req.body;
   let normalizedNumber;
   try {
-    console.log(" Attendance request for number:", whatsappNumber);
+    console.log("📱 Attendance request for number:", whatsappNumber);
     
     if (!whatsappNumber) {
       return res.status(400).json({ message: "WhatsApp number is required" });
@@ -680,79 +680,177 @@ markAttendance: async (req, res) => {
       return res.status(400).json({ message: "Invalid WhatsApp number format" });
     }
 
-    console.log(" Looking for candidate with normalized number:", normalizedNumber);
+    console.log("🔍 Looking for candidates with normalized number:", normalizedNumber);
 
+    // Find ALL candidates with this phone number who have PAID status
+    const allPaidCandidates = await Candidate.find({ 
+      whatsappNumber: normalizedNumber, 
+      paymentStatus: "Paid" 
+    }).sort({ createdAt: -1 });
 
-    const allCandidates = await Candidate.find({ whatsappNumber: normalizedNumber }).sort({ createdAt: -1 });
-    console.log(` Found ${allCandidates.length} total registrations for this number`);
+    console.log(`📊 Found ${allPaidCandidates.length} PAID registrations for this number`);
     
-    if (allCandidates.length > 0) {
-      allCandidates.forEach((c, index) => {
-        console.log(`   ${index + 1}. ${c.name} - Status: ${c.paymentStatus} - Created: ${c.createdAt}`);
-      });
-    }
-
- 
-    let candidate = await Candidate.findOne(
-      { whatsappNumber: normalizedNumber, paymentStatus: "Paid" }
-    ).sort({ createdAt: -1 });
-
-    if (!candidate) {
-      console.log(" No candidate found with Paid status");
+    if (allPaidCandidates.length === 0) {
+      console.log("❌ No paid candidates found");
       
-      
-      const latestCandidate = await Candidate.findOne({ whatsappNumber: normalizedNumber }).sort({ createdAt: -1 });
-      if (latestCandidate) {
-        console.log(` Found candidate ${latestCandidate.name} but payment status is: ${latestCandidate.paymentStatus}`);
+      // Check if there are any registrations at all
+      const anyRegistrations = await Candidate.find({ whatsappNumber: normalizedNumber }).sort({ createdAt: -1 });
+      if (anyRegistrations.length > 0) {
+        console.log(`💸 Found ${anyRegistrations.length} registrations but none have paid status`);
+        const statuses = anyRegistrations.map(c => `${c.name}: ${c.paymentStatus}`).join(", ");
+        console.log(`💳 Payment statuses: ${statuses}`);
         return res.status(403).json({ message: "Payment not completed. Attendance cannot be marked." });
       } else {
-        console.log(" No candidate found with this number at all");
+        console.log("🚫 No registrations found with this number at all");
         return res.status(404).json({ message: "Number not registered! Please register here: https://youthfest.harekrishnavizag.org/ And please visit the enquiry counter." });
       }
     }
 
-    console.log(` Found paid candidate: ${candidate.name} (${candidate.paymentStatus})`);
-    console.log(` Attendance already marked: ${candidate.attendance === true}`);
+    // Process ALL paid candidates
+    const candidateDetails = [];
+    let allAlreadyMarked = true;
     
+    for (let candidate of allPaidCandidates) {
+      console.log(`👤 Processing candidate: ${candidate.name} (Payment: ${candidate.paymentStatus})`);
+      
+      // Generate attendance token if not exists
+      if (!candidate.attendanceToken) {
+        candidate.attendanceToken = candidate._id.toString();
+        console.log(`🎫 Generated new attendance token for ${candidate.name}`);
+      }
 
+      // Mark attendance if not already marked
+      if (candidate.attendance !== true) {
+        candidate.attendance = true;
+        candidate.attendanceDate = new Date();
+        await candidate.save();
+        console.log(`✅ Attendance marked successfully for ${candidate.name}`);
+        allAlreadyMarked = false;
+      } else {
+        console.log(`ℹ️ Attendance was already marked for ${candidate.name}`);
+      }
 
-    if (!candidate.attendanceToken) {
-      candidate.attendanceToken = candidate._id.toString();
-      console.log(" Generated new attendance token");
+      // Add to response array
+      candidateDetails.push({
+        id: candidate._id,
+        name: candidate.name,
+        email: candidate.email,
+        college: candidate.college || candidate.companyName,
+        course: candidate.course,
+        year: candidate.year,
+        gender: candidate.gender,
+        attendanceToken: candidate.attendanceToken,
+        attendanceDate: candidate.attendanceDate,
+        alreadyMarked: candidate.attendance === true
+      });
     }
 
+    const responseStatus = allAlreadyMarked ? "already-marked" : "success";
+    const responseMessage = allAlreadyMarked ? 
+      `Attendance already taken for all ${allPaidCandidates.length} registration(s)` : 
+      `Attendance marked successfully for all ${allPaidCandidates.length} registration(s)`;
 
-    if (candidate.attendance !== true) {
-      candidate.attendance = true;
-      candidate.attendanceDate = new Date();
-      await candidate.save();
-      console.log(" Attendance marked successfully");
-    } else {
-      console.log("ℹ Attendance was already marked");
-    }
+    console.log(`🎉 Response: ${responseMessage}`);
 
-    const details = {
-      status: candidate.attendance === true ? "already-marked" : "success",
-      message: candidate.attendance === true ? "Attendance already taken" : "Attendance marked successfully",
-      attendanceToken: candidate.attendanceToken,
-      name: candidate.name,
-      email: candidate.email,
-      city: candidate.city,
-      college: candidate.college,
-      branch: candidate.branch,
-    };
+    return res.json({
+      status: responseStatus,
+      message: responseMessage,
+      totalCandidates: allPaidCandidates.length,
+      candidates: candidateDetails
+    });
 
-    if (candidate.attendance === true) {
-      return res.json(details);
-    }
-
-    candidate.attendance = true;
-    await candidate.save();
-    await sendWhatsappGupshup(candidate, [candidate.name], "88021e4e-88ae-4cba-bdba-f9b1be3b4948");
-
-    res.json(details);
   } catch (err) {
-    console.error("Attendance marking error:", err);
+    console.error("❌ Attendance marking error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+},
+
+// New function to get QR codes for a phone number without marking attendance
+getQRCodesByPhone: async (req, res) => {
+  const { whatsappNumber } = req.body;
+  let normalizedNumber;
+  try {
+    console.log("📱 QR codes request for number:", whatsappNumber);
+    
+    if (!whatsappNumber) {
+      return res.status(400).json({ message: "WhatsApp number is required" });
+    }
+    if (/^\d{10}$/.test(whatsappNumber)) {
+      normalizedNumber = "91" + whatsappNumber;
+    } else if (/^91\d{10}$/.test(whatsappNumber)) {
+      normalizedNumber = whatsappNumber;
+    } else {
+      return res.status(400).json({ message: "Invalid WhatsApp number format" });
+    }
+
+    console.log("🔍 Looking for candidates with normalized number:", normalizedNumber);
+
+    // Find ALL candidates with this phone number who have PAID status
+    const allPaidCandidates = await Candidate.find({ 
+      whatsappNumber: normalizedNumber, 
+      paymentStatus: "Paid" 
+    }).sort({ createdAt: -1 });
+
+    console.log(`📊 Found ${allPaidCandidates.length} PAID registrations for this number`);
+    
+    if (allPaidCandidates.length === 0) {
+      console.log("❌ No paid candidates found");
+      
+      // Check if there are any registrations at all
+      const anyRegistrations = await Candidate.find({ whatsappNumber: normalizedNumber }).sort({ createdAt: -1 });
+      if (anyRegistrations.length > 0) {
+        console.log(`💸 Found ${anyRegistrations.length} registrations but none have paid status`);
+        const statuses = anyRegistrations.map(c => `${c.name}: ${c.paymentStatus}`).join(", ");
+        console.log(`💳 Payment statuses: ${statuses}`);
+        return res.status(403).json({ message: "Payment not completed. QR codes cannot be generated." });
+      } else {
+        console.log("🚫 No registrations found with this number at all");
+        return res.status(404).json({ message: "Number not registered! Please register here: https://youthfest.harekrishnavizag.org/ And please visit the enquiry counter." });
+      }
+    }
+
+    // Process ALL paid candidates but DO NOT mark attendance
+    const candidateDetails = [];
+    
+    for (let candidate of allPaidCandidates) {
+      console.log(`👤 Processing candidate: ${candidate.name} (Payment: ${candidate.paymentStatus})`);
+      
+      // Generate attendance token if not exists
+      if (!candidate.attendanceToken) {
+        candidate.attendanceToken = candidate._id.toString();
+        await candidate.save();
+        console.log(`🎫 Generated new attendance token for ${candidate.name}`);
+      }
+
+      // Add to response array without marking attendance
+      candidateDetails.push({
+        id: candidate._id,
+        name: candidate.name,
+        email: candidate.email,
+        college: candidate.college || candidate.companyName,
+        course: candidate.course,
+        year: candidate.year,
+        gender: candidate.gender,
+        attendanceToken: candidate.attendanceToken,
+        attendanceDate: candidate.attendanceDate,
+        adminAttendanceDate: candidate.adminAttendanceDate,
+        attendance: candidate.attendance,
+        adminAttendance: candidate.adminAttendance,
+        isAttended: (candidate.attendance === true || candidate.adminAttendance === true)
+      });
+    }
+
+    console.log(`🎫 Returning QR codes for ${allPaidCandidates.length} registration(s)`);
+
+    return res.json({
+      status: "success",
+      message: `Found ${allPaidCandidates.length} registration(s) for this number`,
+      totalCandidates: allPaidCandidates.length,
+      candidates: candidateDetails
+    });
+
+  } catch (err) {
+    console.error("❌ QR codes fetch error:", err);
     res.status(500).json({ message: "Server error" });
   }
 },
@@ -760,57 +858,91 @@ markAttendance: async (req, res) => {
 adminAttendanceScan: async (req, res) => {
   try {
     const { token } = req.body;
-    console.log(" Admin scanning QR token:", token);
+    console.log("🔍 Admin scanning QR token:", token);
     
-    const candidate = await Candidate.findOne({ attendanceToken: token });
+    // Find the specific candidate who generated this QR code
+    const scannedCandidate = await Candidate.findOne({ attendanceToken: token });
     
-    if (!candidate) {
-      console.log(" No candidate found with attendance token:", token);
-      return res.status(404).json({ message: "Candidate not found" });
+    if (!scannedCandidate) {
+      console.log("❌ No candidate found with attendance token:", token);
+      return res.status(404).json({ message: "QR Code not found" });
     }
     
-    console.log(` Found candidate: ${candidate.name} (${candidate.email})`);
-    console.log(` Attendance status: ${candidate.attendance ? 'Marked' : 'Not marked'}`);
-    console.log(`Admin attendance status: ${candidate.adminAttendance ? 'Already scanned' : 'Not scanned yet'}`);
+    console.log(`👤 Found QR owner: ${scannedCandidate.name} (${scannedCandidate.whatsappNumber})`);
     
-    if (!candidate.attendance) {
-      console.log(" Candidate did not mark attendance first");
-      return res.status(400).json({ message: "Candidate did not mark attendance" });
-    }
+    // Check if this specific person already has admin attendance marked
+    let wasAlreadyScanned = scannedCandidate.adminAttendance;
     
-    if (candidate.adminAttendance) {
-      console.log(" Admin attendance already marked");
-      return res.status(200).json({
-        status: "already-marked",
-        message: "Admin already marked attendance",
-        name: candidate.name,
-        email: candidate.email,
-        phone: candidate.whatsappNumber,
-        gender: candidate.gender,
-        college: candidate.college,
-        course: candidate.course,
-      });
+    // Mark admin attendance for the person whose QR was scanned
+    if (!scannedCandidate.adminAttendance) {
+      scannedCandidate.adminAttendance = true;
+      scannedCandidate.adminAttendanceDate = new Date();
+      // Also mark regular attendance if not already done
+      if (!scannedCandidate.attendance) {
+        scannedCandidate.attendance = true;
+        scannedCandidate.attendanceDate = new Date();
+      }
+      await scannedCandidate.save();
+      console.log(`✅ Admin attendance marked for: ${scannedCandidate.name}`);
+    } else {
+      console.log(`ℹ️ Admin attendance was already marked for: ${scannedCandidate.name}`);
     }
 
-    candidate.adminAttendance = true;
-    candidate.adminAttendanceDate = new Date();
-    await candidate.save();
-    
-    console.log(` Admin attendance marked for: ${candidate.name}`);
+    // Find ALL family members with the same phone number for display purposes
+    const allFamilyMembers = await Candidate.find({ 
+      whatsappNumber: scannedCandidate.whatsappNumber, 
+      paymentStatus: "Paid"
+    }).sort({ createdAt: 1 });
 
-    res.json({
-      status: "success",
-      message: "Admin attendance marked successfully",
-      name: candidate.name,
-      email: candidate.email,
-      phone: candidate.whatsappNumber,
-      gender: candidate.gender,
-      college: candidate.college,
-      course: candidate.course,
-      year: candidate.year
+    console.log(`👨‍👩‍👧‍👦 Found ${allFamilyMembers.length} family members with this phone number`);
+
+    const familyDetails = allFamilyMembers.map(member => ({
+      id: member._id,
+      name: member.name,
+      email: member.email,
+      phone: member.whatsappNumber,
+      gender: member.gender,
+      college: member.college || member.companyName,
+      course: member.course,
+      year: member.year,
+      attendanceToken: member.attendanceToken,
+      adminAttendance: member.adminAttendance || false,
+      adminAttendanceDate: member.adminAttendanceDate,
+      wasJustScanned: member._id.toString() === scannedCandidate._id.toString(),
+      wasAlreadyScanned: member._id.toString() === scannedCandidate._id.toString() ? wasAlreadyScanned : member.adminAttendance
+    }));
+
+    const responseStatus = wasAlreadyScanned ? "already-marked" : "success";
+    const responseMessage = wasAlreadyScanned ? 
+      `Attendance already marked for ${scannedCandidate.name}` : 
+      `Attendance marked successfully for ${scannedCandidate.name}`;
+
+    console.log(`🎉 Admin scan result: ${responseMessage}`);
+
+    return res.json({
+      status: responseStatus,
+      message: responseMessage,
+      totalMembers: allFamilyMembers.length,
+      scannedPerson: scannedCandidate.name,
+      newlyScanned: wasAlreadyScanned ? 0 : 1,
+      data: {
+        id: scannedCandidate._id,
+        name: scannedCandidate.name,
+        email: scannedCandidate.email,
+        phone: scannedCandidate.whatsappNumber,
+        gender: scannedCandidate.gender,
+        college: scannedCandidate.college || scannedCandidate.companyName,
+        course: scannedCandidate.course,
+        year: scannedCandidate.year,
+        adminAttendance: true,
+        adminAttendanceDate: scannedCandidate.adminAttendanceDate,
+        wasAlreadyScanned: wasAlreadyScanned
+      },
+      familyMembers: familyDetails
     });
+
   } catch (error) {
-    console.error("Error in admin attendance scan:", error);
+    console.error("❌ Error in admin attendance scan:", error);
     res.status(500).json({ status: "error", message: error.message });
   }
 },

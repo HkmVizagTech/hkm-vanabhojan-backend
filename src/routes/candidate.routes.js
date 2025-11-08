@@ -26,6 +26,7 @@ CandidateRouter.post('/verify-payment-immediately', CandidateController.verifyPa
 CandidateRouter.post('/check-pending-payments', CandidateController.checkPendingPayments);
 CandidateRouter.post('/', CandidateController.createCandidate);           
 CandidateRouter.post("/mark-attendance", CandidateController.markAttendance);
+CandidateRouter.post("/get-qr-codes", CandidateController.getQRCodesByPhone);
 CandidateRouter.post('/admin/attendance-scan', authenticateToken, requireRole(['admin', 'user']), CandidateController.adminAttendanceScan);
 CandidateRouter.post('/generate-single-certificate', authenticateToken, requireRole(['admin']), CandidateController.generateSingleCertificateOnly);
 
