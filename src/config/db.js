@@ -1,7 +1,15 @@
 const mongoose = require('mongoose');
-require("dotenv").config();
-const Connection  =() =>{
-     return mongoose.connect(process.env.MONGO_URI,{ useNewUrlParser: true, useUnifiedTopology: true })
+const { env } = require('./env');
+const logger = require('../utils/logger');
+
+mongoose.set('strictQuery', true);
+
+async function connectDb() {
+  await mongoose.connect(env.MONGO_URI, { serverSelectionTimeoutMS: 15000 });
+  logger.info({ db: mongoose.connection.name }, 'MongoDB connected');
 }
 
-module.exports = {Connection}
+const disconnectDb = () => mongoose.disconnect();
+const isDbReady = () => mongoose.connection.readyState === 1;
+
+module.exports = { connectDb, disconnectDb, isDbReady };
