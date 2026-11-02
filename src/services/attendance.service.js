@@ -1,13 +1,17 @@
 const crypto = require('node:crypto');
 const Candidate = require('../models/Candidate');
-const { PAYMENT_STATUS, REGISTRATION_URL } = require('../config/constants');
+const { PAYMENT_STATUS, ADMIN_ACTIONS, REGISTRATION_URL } = require('../config/constants');
 const ApiError = require('../utils/ApiError');
 const candidates = require('./candidate.service');
+const qrDelivery = require('./qrDelivery.service');
 const { normalizePhone } = require('../utils/phone');
 
 const NOT_REGISTERED = `Number not registered! Please register here: ${REGISTRATION_URL} And please visit the enquiry counter.`;
 const isAttended = c => c.attendance === true || c.adminAttendance === true;
 const orgOf = c => c.college || c.companyName;
+
+/** Students who paid online get their QR only after an admin has checked their ID. Cash-desk students are checked in person. */
+const awaitingVerification = c => qrDelivery.needsIdVerification(c) && c.adminAction !== ADMIN_ACTIONS.ACCEPTED;
 
 /** Existing tokens are the candidate id; new ones are random so they cannot be guessed. */
 async function ensureToken(candidate) {
@@ -37,7 +41,11 @@ async function paidRegistrationsFor(rawNumber, paymentMessage) {
 
 /** QR codes a person shows at the gate. Read-only: viewing a QR never marks attendance. */
 async function getQrCodes(rawNumber) {
-  const paid = await paidRegistrationsFor(rawNumber, 'Payment not completed. QR codes cannot be generated.');
+  const everyone = await paidRegistrationsFor(rawNumber, 'Payment not completed. QR codes cannot be generated.');
+  const paid = everyone.filter(c => !awaitingVerification(c));
+  if (!paid.length) {
+    throw ApiError.forbidden('Your student ID is being verified. We will send your QR on WhatsApp as soon as our team approves it.');
+  }
   const candidates = [];
   for (const registration of paid) {
     const c = await ensureToken(registration);
@@ -202,4 +210,4 @@ async function attendanceReport({ date, status, event }) {
   return { status: 'success', summary: { total: candidates.length, present, absent: candidates.length - present }, candidates };
 }
 
-module.exports = { getQrCodes, markByPhone, scan, listScanned, attendanceReport };
+module.exports = { ensureToken, awaitingVerification, getQrCodes, markByPhone, scan, listScanned, attendanceReport };

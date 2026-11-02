@@ -12,7 +12,8 @@ const { PAYMENT_STATUS } = require('../config/constants');
 const ApiError = require('../utils/ApiError');
 const { normalizePhone } = require('../utils/phone');
 const logger = require('../utils/logger');
-const gupshup = require('./gupshup');
+const whatsapp = require('./whatsapp.service');
+const { TEMPLATES } = require('../config/whatsapp');
 
 const FONT_SIZE = 36;
 const BULK_DELAY_MS = 3000;
@@ -47,33 +48,17 @@ async function renderCertificate(name) {
   return pdf.save();
 }
 
-const parseDelivery = response => {
-  const ok = response.status >= 200 && response.status < 300;
-  return ok
-    ? { ok, messageId: response.data?.messageId || 'unknown', status: response.data?.status || 'submitted' }
-    : { ok, code: response.status, error: typeof response.data === 'string' ? response.data : JSON.stringify(response.data || {}) };
-};
-
-/** WhatsApp document template, falling back to the legacy endpoint and then to a text template with the link. */
-async function deliver({ destination, name, url, filename }) {
-  const common = { channel: 'whatsapp', source: env.GUPSHUP_SOURCE, destination, 'src.name': env.GUPSHUP_APP_NAME };
-  const template = { id: env.WA_TEMPLATE_CERTIFICATE, params: [name] };
-
-  let result = parseDelivery(
-    await gupshup.postForm('/wa/api/v1/template/msg', { ...common, template, message: { document: { link: url, filename }, type: 'document' } })
-  );
-  if (!result.ok && result.code >= 400 && result.code < 500) {
-    result = parseDelivery(
-      await gupshup.postForm('/sm/api/v1/template/msg', { ...common, template, message: { type: 'document', url, filename } })
-    );
-  }
-  if (!result.ok && env.WA_TEMPLATE_CERTIFICATE_TEXT) {
-    result = parseDelivery(
-      await gupshup.postForm('/wa/api/v1/template/msg', { ...common, template: { id: env.WA_TEMPLATE_CERTIFICATE_TEXT, params: [name, url] } })
-    );
-  }
-  if (!result.ok) throw new ApiError(502, `Gupshup ${result.code}: ${result.error}`);
-  return result;
+/** WhatsApp document template: the PDF travels as a link in the header. Throws when the provider refuses it. */
+async function deliver({ candidate, name, url, filename }) {
+  const result = await whatsapp.send({
+    candidate,
+    kind: 'certificate',
+    template: TEMPLATES.CERTIFICATE,
+    header: { type: 'document', link: url, filename: 'Vanabhojanam_Certificate.pdf' },
+    params: [name],
+  });
+  if (!result.ok) throw new ApiError(502, `WhatsApp: ${result.error}`);
+  return { ok: true, messageId: result.messageId, status: 'submitted' };
 }
 
 /** Generate, upload, send and record one certificate. Returns { documentId, file, whatsapp }. */
@@ -90,8 +75,8 @@ async function issue(candidate, issuedBy) {
   const reachable = await axios.head(file.url, { timeout: 10000, validateStatus: () => true });
   if (reachable.status >= 400) throw new Error(`Certificate URL not reachable (status ${reachable.status})`);
 
-  const whatsapp = await deliver({
-    destination,
+  const delivery = await deliver({
+    candidate,
     name: candidate.name || 'Participant',
     url: file.url,
     filename: `KP-Certificate-${documentId}.pdf`,
@@ -108,13 +93,13 @@ async function issue(candidate, issuedBy) {
       certificateFileName: `${documentId}.pdf`,
       certificateFileSize: file.size,
       certificateStorageMethod: 'r2',
-      certificateWhatsAppMessageId: whatsapp.messageId,
-      certificateWhatsAppStatus: whatsapp.status,
+      certificateWhatsAppMessageId: delivery.messageId,
+      certificateWhatsAppStatus: delivery.status,
       certificateDeliveryMethod: 'template_document_link',
     },
   });
   logger.info({ candidateId: candidate._id, documentId }, 'Certificate issued');
-  return { documentId, file, whatsapp };
+  return { documentId, file, whatsapp: delivery };
 }
 
 function assertEligible(candidate) {
@@ -241,7 +226,7 @@ async function health(dbReady) {
   const templateOk = await exists(TEMPLATE_PDF);
   const parts = {
     storage: integrations.storage && integrations.publicFiles ? 'healthy' : 'unhealthy',
-    whatsapp: integrations.gupshup ? 'healthy' : 'unhealthy',
+    whatsapp: integrations.whatsapp ? 'healthy' : 'unhealthy',
     database: dbReady ? 'healthy' : 'unhealthy',
     template: templateOk ? 'healthy' : 'unhealthy',
   };

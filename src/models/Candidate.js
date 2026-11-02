@@ -40,6 +40,7 @@ const candidateSchema = new Schema(
     collectedByName: String,
     cashCollectedAt: Date,
     qrSentAt: Date,
+    whatsappLog: [{ _id: false, kind: String, template: String, ok: Boolean, error: String, response: mongoose.Schema.Types.Mixed, at: Date }],
     qrSendStatus: { type: String, enum: ['sent', 'failed', null], default: null },
 
     // refunds

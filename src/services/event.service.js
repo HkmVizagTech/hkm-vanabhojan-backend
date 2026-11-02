@@ -190,14 +190,14 @@ async function followupList({ from, to, audience }) {
 /** WhatsApp invitation to the follow-up list. Needs an approved template: WA_TEMPLATE_FOLLOWUP. */
 async function sendFollowup(query) {
   if (!env.WA_TEMPLATE_FOLLOWUP) {
-    throw ApiError.unavailable('Set WA_TEMPLATE_FOLLOWUP to an approved template id to send invitations');
+    throw ApiError.unavailable('Set WA_TEMPLATE_FOLLOWUP to the approved template name (for example vb_followup1) to send invitations');
   }
   const [{ people }, toEvent] = await Promise.all([followupList(query), findOrFail(query.to)]);
   const results = [];
   for (const person of people) {
     const outcome = await whatsapp.sendTemplateTo({
       phone: person.phone,
-      templateId: env.WA_TEMPLATE_FOLLOWUP,
+      template: env.WA_TEMPLATE_FOLLOWUP,
       params: [person.names[0], toEvent.name],
       kind: 'followup',
     });

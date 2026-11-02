@@ -9,6 +9,7 @@ const ApiError = require('../utils/ApiError');
 const { toPaise } = require('../utils/text');
 const logger = require('../utils/logger');
 const whatsapp = require('./whatsapp.service');
+const qrDelivery = require('./qrDelivery.service');
 
 const safeEqual = (a, b) => {
   const left = Buffer.from(String(a));
@@ -87,6 +88,8 @@ async function markPaid(candidateId, { payment, paymentId, source }) {
   if (!updated) return { candidate: await Candidate.findById(candidateId), changed: false };
 
   await whatsapp.notifyRegistrationConfirmed(updated);
+  // Online students get their QR once an admin approves their ID; everyone else gets it straight after the confirmation.
+  if (!qrDelivery.needsIdVerification(updated)) await qrDelivery.deliverPass(updated);
   return { candidate: updated, changed: true };
 }
 

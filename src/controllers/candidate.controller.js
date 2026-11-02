@@ -42,8 +42,13 @@ exports.accept = async (req, res) => {
 };
 
 exports.reject = async (req, res) => {
-  const data = await present(await candidates.reject(req.params.candidateId));
-  res.json({ status: 'success', message: 'Candidate rejected successfully', data });
+  const { candidate, refund, refundError } = await candidates.reject(req.params.candidateId);
+  const messages = {
+    processed: 'Candidate rejected and the payment is being refunded',
+    failed: `Candidate rejected, but the refund failed (${refundError}). Open the candidate and use Refund to retry`,
+    skipped: 'Candidate rejected successfully',
+  };
+  res.json({ status: 'success', message: messages[refund], refund, data: await present(candidate) });
 };
 
 exports.refund = async (req, res) => {

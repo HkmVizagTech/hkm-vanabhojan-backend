@@ -41,6 +41,30 @@ describe('get-qr-codes', () => {
   });
 });
 
+describe('student ID verification', () => {
+  const online = (name, overrides = {}) =>
+    paid(name, { collegeOrWorking: 'College', paymentMethod: 'upi', whatsappNumber: '919222222222', ...overrides });
+  const qr = () => api().post('/users/get-qr-codes').send({ whatsappNumber: '9222222222' });
+
+  it('withholds the QR from an online student until an admin approves', async () => {
+    const student = await online('Student');
+    const before = await qr();
+    expect(before.status).toBe(403);
+    expect(before.body.message).toMatch(/verified/i);
+
+    await api().post(`/users/admin/accept/${student._id}`).set(await adminHeader());
+    expect((await qr()).status).toBe(200);
+  });
+
+  it('does not hold back cash-desk students or other registrants', async () => {
+    await online('Cash Student', { paymentMethod: 'Cash' });
+    expect((await qr()).status).toBe(200);
+    await Candidate.deleteMany({});
+    await online('Worker', { collegeOrWorking: 'Working' });
+    expect((await qr()).status).toBe(200);
+  });
+});
+
 describe('gate scan', () => {
   const tokenFor = async name => {
     await api().post('/users/get-qr-codes').send({ whatsappNumber: '9876543210' });

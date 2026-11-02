@@ -95,7 +95,7 @@ describe('registration uses the current event', () => {
     await paid(y2025, 'Old Olga', '919000000001');
     const y2026 = await createEvent(headers, { name: 'V 2026', date: '2026-11-08' });
     await api().post(`/events/${y2026._id}/set-current`).set(headers);
-    await paid(y2026, 'New Nikhil', '919000000002');
+    await paid(y2026, 'New Nikhil', '919000000002', { adminAction: 'Accepted' });
 
     const names = async q => (await api().get(`/users${q}`).set(headers)).body.candidates.map(c => c.name).sort();
     expect(await names('')).toEqual(['New Nikhil']);

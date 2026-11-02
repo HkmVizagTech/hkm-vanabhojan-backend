@@ -1,4 +1,6 @@
 const Candidate = require('../models/Candidate');
+const logger = require('../utils/logger');
+const qrDelivery = require('./qrDelivery.service');
 const { PAYMENT_STATUS, ADMIN_ACTIONS } = require('../config/constants');
 const ApiError = require('../utils/ApiError');
 const { escapeRegex } = require('../utils/text');
@@ -45,6 +47,8 @@ async function paymentStatusFor(id) {
     paymentId: candidate.paymentId,
     paymentDate: candidate.paymentDate,
     paymentAmount: candidate.paymentAmount,
+    collegeOrWorking: candidate.collegeOrWorking,
+    paymentMethod: candidate.paymentMethod,
   };
 }
 
@@ -53,15 +57,33 @@ async function accept(id) {
   Object.assign(candidate, { adminAction: ADMIN_ACTIONS.ACCEPTED, adminActionDate: new Date() });
   await candidate.save();
   await whatsapp.notifyAccepted(candidate);
+  if (candidate.paymentStatus === PAYMENT_STATUS.PAID && qrDelivery.needsIdVerification(candidate)) await qrDelivery.deliverPass(candidate);
   return candidate;
 }
 
+/**
+ * Rejects a registration, tells the person, and refunds an online payment (the rejected message promises it).
+ * A refund problem never undoes the rejection: the admin can retry the refund from the candidate.
+ * Resolves to { candidate, refund: 'processed' | 'failed' | 'skipped', refundError? }.
+ */
 async function reject(id) {
   const candidate = await findOrFail(id);
   Object.assign(candidate, { adminAction: ADMIN_ACTIONS.REJECTED, adminActionDate: new Date() });
   await candidate.save();
   await whatsapp.notifyRejected(candidate);
-  return candidate;
+
+  const refundable = candidate.paymentStatus === PAYMENT_STATUS.PAID && candidate.paymentMethod !== 'Cash' && candidate.paymentId;
+  if (!refundable) return { candidate, refund: 'skipped' };
+  try {
+    await payments.refund(candidate);
+    // payments.refund marks the action as Refunded; keep the reason visible as Rejected.
+    candidate.adminAction = ADMIN_ACTIONS.REJECTED;
+    await candidate.save();
+    return { candidate, refund: 'processed' };
+  } catch (error) {
+    logger.error({ candidateId: candidate._id, err: error.message }, 'Refund after rejection failed');
+    return { candidate, refund: 'failed', refundError: error.message };
+  }
 }
 
 async function refund(id) {
@@ -87,7 +109,8 @@ async function removeByName(name) {
 
 /** Bulk reminder to every paid registration with a valid number. Sequential to respect provider limits. */
 async function sendReminders(time) {
-  const paid = await Candidate.find({ paymentStatus: PAYMENT_STATUS.PAID });
+  // Current edition only: last year's attendees must not get this year's reminder.
+  const paid = await Candidate.find({ paymentStatus: PAYMENT_STATUS.PAID, ...(await eventFilter()) });
   const results = [];
   for (const candidate of paid) {
     const outcome = await whatsapp.sendReminder(candidate, time);
