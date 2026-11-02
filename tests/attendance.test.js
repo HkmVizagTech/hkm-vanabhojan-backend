@@ -21,30 +21,36 @@ describe('phone normalisation', () => {
 });
 
 describe('get-qr-codes', () => {
+  it('is not public: a phone number alone must never reveal someone\'s QR', async () => {
+    await paid('Arjun');
+    const res = await api().post('/users/get-qr-codes').send({ whatsappNumber: '9876543210' });
+    expect(res.status).toBe(401);
+  });
+
   it('returns a token for every paid registration under the number without marking attendance', async () => {
     await paid('Arjun');
     await paid('Sita', { gender: 'Female' });
-    const res = await api().post('/users/get-qr-codes').send({ whatsappNumber: '9876543210' });
+    const res = await api().post('/users/get-qr-codes').set(await adminHeader()).send({ whatsappNumber: '9876543210' });
     expect(res.status).toBe(200);
     expect(res.body.totalCandidates).toBe(2);
     expect(res.body.candidates.every(c => c.attendanceToken && c.isAttended === false)).toBe(true);
 
-    const again = await api().post('/users/get-qr-codes').send({ whatsappNumber: '9876543210' });
+    const again = await api().post('/users/get-qr-codes').set(await adminHeader()).send({ whatsappNumber: '9876543210' });
     expect(again.body.candidates.map(c => c.attendanceToken).sort()).toEqual(res.body.candidates.map(c => c.attendanceToken).sort());
   });
 
   it('distinguishes unregistered numbers from unpaid registrations', async () => {
-    expect((await api().post('/users/get-qr-codes').send({ whatsappNumber: '9000000000' })).status).toBe(404);
+    expect((await api().post('/users/get-qr-codes').set(await adminHeader()).send({ whatsappNumber: '9000000000' })).status).toBe(404);
     await paid('Pending Pat', { whatsappNumber: '919111111111', paymentStatus: 'Pending' });
-    expect((await api().post('/users/get-qr-codes').send({ whatsappNumber: '9111111111' })).status).toBe(403);
-    expect((await api().post('/users/get-qr-codes').send({ whatsappNumber: '12' })).status).toBe(400);
+    expect((await api().post('/users/get-qr-codes').set(await adminHeader()).send({ whatsappNumber: '9111111111' })).status).toBe(403);
+    expect((await api().post('/users/get-qr-codes').set(await adminHeader()).send({ whatsappNumber: '12' })).status).toBe(400);
   });
 });
 
 describe('student ID verification', () => {
   const online = (name, overrides = {}) =>
     paid(name, { collegeOrWorking: 'College', paymentMethod: 'upi', whatsappNumber: '919222222222', ...overrides });
-  const qr = () => api().post('/users/get-qr-codes').send({ whatsappNumber: '9222222222' });
+  const qr = async () => api().post('/users/get-qr-codes').set(await adminHeader()).send({ whatsappNumber: '9222222222' });
 
   it('withholds the QR from an online student until an admin approves', async () => {
     const student = await online('Student');
@@ -67,7 +73,7 @@ describe('student ID verification', () => {
 
 describe('gate scan', () => {
   const tokenFor = async name => {
-    await api().post('/users/get-qr-codes').send({ whatsappNumber: '9876543210' });
+    await api().post('/users/get-qr-codes').set(await adminHeader()).send({ whatsappNumber: '9876543210' });
     return (await Candidate.findOne({ name })).attendanceToken;
   };
 

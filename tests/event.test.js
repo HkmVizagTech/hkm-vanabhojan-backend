@@ -102,8 +102,8 @@ describe('registration uses the current event', () => {
     expect(await names('?event=all')).toEqual(['New Nikhil', 'Old Olga']);
     expect(await names(`?event=${y2025._id}`)).toEqual(['Old Olga']);
 
-    expect((await api().post('/users/get-qr-codes').send({ whatsappNumber: '9000000001' })).status).toBe(404);
-    expect((await api().post('/users/get-qr-codes').send({ whatsappNumber: '9000000002' })).status).toBe(200);
+    expect((await api().post('/users/get-qr-codes').set(headers).send({ whatsappNumber: '9000000001' })).status).toBe(404);
+    expect((await api().post('/users/get-qr-codes').set(headers).send({ whatsappNumber: '9000000002' })).status).toBe(200);
   });
 });
 

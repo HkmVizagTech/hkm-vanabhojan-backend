@@ -2,14 +2,14 @@ const { Router } = require('express');
 const controller = require('../controllers/attendance.controller');
 const { authenticate, requireRole } = require('../middlewares/auth');
 const { validate } = require('../middlewares/validate');
-const { publicLimiter } = require('../middlewares/rateLimit');
 const schemas = require('../validators/candidate');
 const { ROLES } = require('../config/constants');
 
 const router = Router();
 const staff = [authenticate, requireRole(ROLES.ADMIN, ROLES.USER)];
 
-router.post('/get-qr-codes', publicLimiter, validate({ body: schemas.phoneBody }), controller.getQrCodes);
+// Staff only: anyone who knew a phone number could otherwise pull that person's entry QR and use it.
+router.post('/get-qr-codes', ...staff, validate({ body: schemas.phoneBody }), controller.getQrCodes);
 
 router.post('/mark-attendance', ...staff, validate({ body: schemas.phoneBody }), controller.markByPhone);
 router.post('/admin/attendance-scan', ...staff, validate({ body: schemas.scanBody }), controller.scan);
