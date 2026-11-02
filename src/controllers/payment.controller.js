@@ -5,7 +5,7 @@ const { handleWebhook } = require('../services/webhook.service');
 const ApiError = require('../utils/ApiError');
 const logger = require('../utils/logger');
 const { PAYMENT_STATUS } = require('../config/constants');
-const { integrations } = require('../config/env');
+const { env, integrations } = require('../config/env');
 
 const summary = c => ({
   name: c.name,
@@ -18,7 +18,8 @@ const summary = c => ({
 
 exports.createOrder = async (req, res) => {
   const order = await payments.createOrder({ formData: req.body.formData });
-  res.json(order);
+  // The key id is public. Sending it from the server means checkout always uses the key that created the order.
+  res.json({ ...order, keyId: env.RAZORPAY_KEY_ID });
 };
 
 exports.createOrderWithFile = async (req, res) => {
@@ -27,7 +28,8 @@ exports.createOrderWithFile = async (req, res) => {
     throw ApiError.badRequest('Student ID card is required');
   }
   const order = await payments.createOrder({ formData, file: req.file });
-  res.json(order);
+  // The key id is public. Sending it from the server means checkout always uses the key that created the order.
+  res.json({ ...order, keyId: env.RAZORPAY_KEY_ID });
 };
 
 exports.verifyPayment = async (req, res) => {
