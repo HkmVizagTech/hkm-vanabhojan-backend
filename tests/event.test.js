@@ -1,4 +1,4 @@
-const { startDb, stopDb, clearDb, api, adminHeader, registrationForm, createEvent, eventPayload } = require('./helpers');
+const { startDb, stopDb, clearDb, api, adminHeader, registrationForm, workingForm, createEvent, eventPayload } = require('./helpers');
 const Candidate = require('../src/models/Candidate');
 
 jest.mock('../src/config/razorpay', () => ({
@@ -67,26 +67,26 @@ describe('registration uses the current event', () => {
   it('charges the fees of the current event and links the registration to it', async () => {
     const headers = await adminHeader();
     const event = await createEvent(headers, { fees: { college: 149, working: 1500 } });
-    const res = await api().post('/users/create-order').send({ amount: 1, formData: registrationForm() });
+    const res = await api().post('/users/create-order').send({ amount: 1, formData: workingForm() });
     expect(res.status).toBe(200);
-    expect(res.body.amount).toBe(14900);
+    expect(res.body.amount).toBe(150000);
     const saved = await Candidate.findOne({ orderId: res.body.id });
     expect(String(saved.event)).toBe(String(event._id));
-    expect(saved.paymentAmount).toBe(149);
+    expect(saved.paymentAmount).toBe(1500);
   });
 
   it('is refused while registration is closed or no event exists', async () => {
-    const none = await api().post('/users/create-order').send({ formData: registrationForm() });
+    const none = await api().post('/users/create-order').send({ formData: workingForm() });
     expect(none.status).toBe(409);
 
     const headers = await adminHeader();
     const event = await createEvent(headers, { registrationOpen: false });
-    const closed = await api().post('/users/create-order').send({ formData: registrationForm() });
+    const closed = await api().post('/users/create-order').send({ formData: workingForm() });
     expect(closed.status).toBe(409);
     expect(closed.body.message).toMatch(/closed/i);
 
     await api().put(`/events/${event._id}`).set(headers).send(eventPayload({ registrationOpen: true }));
-    expect((await api().post('/users/create-order').send({ formData: registrationForm() })).status).toBe(200);
+    expect((await api().post('/users/create-order').send({ formData: workingForm() })).status).toBe(200);
   });
 
   it('filters candidate lists by event (default: current) and QR codes show only the current edition', async () => {

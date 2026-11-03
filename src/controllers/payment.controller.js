@@ -17,6 +17,8 @@ const summary = c => ({
 });
 
 exports.createOrder = async (req, res) => {
+  // A student must upload their ID, which only the multipart route carries.
+  if (req.body.formData.collegeOrWorking === 'College') throw ApiError.badRequest('Student ID card is required');
   const order = await payments.createOrder({ formData: req.body.formData });
   // The key id is public. Sending it from the server means checkout always uses the key that created the order.
   res.json({ ...order, keyId: env.RAZORPAY_KEY_ID });

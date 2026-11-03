@@ -12,7 +12,7 @@ const base = {
   gender: z.enum(['Male', 'Female', 'Other'], { error: 'Please select gender' }),
   dob: z.coerce.date({ error: 'Date of birth is required' }).refine(d => d <= new Date(), 'Date of birth cannot be in the future'),
   collegeOrWorking: z.enum(Object.values(CANDIDATE_TYPES), { error: 'Please select one option' }),
-  howDidYouKnow: text(100).min(1, 'Please select how you came to know about this fest'),
+  howDidYouKnow: optionalText(100), // no longer asked on the form; older records still carry it
   college: optionalText(200),
   course: optionalText(100),
   year: optionalText(10),

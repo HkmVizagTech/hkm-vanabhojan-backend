@@ -1,4 +1,4 @@
-const { startDb, stopDb, clearDb, api, adminHeader, registrationForm, sign, createEvent } = require('./helpers');
+const { startDb, stopDb, clearDb, api, adminHeader, registrationForm, workingForm, sign, createEvent } = require('./helpers');
 const Candidate = require('../src/models/Candidate');
 const payments = require('../src/services/payment.service');
 
@@ -18,19 +18,25 @@ beforeEach(async () => {
 
 describe('create-order', () => {
   it('prices the order on the server and ignores the amount sent by the browser', async () => {
-    const res = await api().post('/users/create-order').send({ amount: 100, formData: registrationForm() });
+    const res = await api().post('/users/create-order').send({ amount: 100, formData: workingForm() });
     expect(res.status).toBe(200);
-    expect(mockCreate.mock.calls[0][0].amount).toBe(9900);
+    expect(mockCreate.mock.calls[0][0].amount).toBe(120000);
 
     const saved = await Candidate.findOne({ orderId: 'order_TEST1' });
-    expect(saved).toMatchObject({ paymentAmount: 99, paymentStatus: 'Pending', whatsappNumber: '919876543210' });
+    expect(saved).toMatchObject({ paymentAmount: 1200, paymentStatus: 'Pending', whatsappNumber: '919876543210' });
   });
 
-  it('charges working professionals the professional fee', async () => {
-    await api()
-      .post('/users/create-order')
-      .send({ formData: registrationForm({ collegeOrWorking: 'Working', companyName: 'TCS', college: '', course: '', year: '' }) });
-    expect(mockCreate.mock.calls[0][0].amount).toBe(120000);
+  it('refuses a student registration that has no ID card', async () => {
+    const res = await api().post('/users/create-order').send({ formData: registrationForm() });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/ID card is required/i);
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('does not ask how the person heard about the festival', async () => {
+    const { howDidYouKnow, ...form } = workingForm();
+    expect(howDidYouKnow).toBeDefined();
+    expect((await api().post('/users/create-order').send({ formData: form })).status).toBe(200);
   });
 
   it('rejects incomplete or invalid registrations before touching Razorpay', async () => {
@@ -46,7 +52,7 @@ describe('verify-payment', () => {
     return { ...body, razorpay_signature: sign('rzp_test_secret', 'order_TEST1|pay_TEST1'), ...overrides };
   };
 
-  beforeEach(() => api().post('/users/create-order').send({ formData: registrationForm() }));
+  beforeEach(() => api().post('/users/create-order').send({ formData: workingForm() }));
 
   it('confirms a correctly signed payment once, then reports it as already registered', async () => {
     const first = await api().post('/users/verify-payment').send(callback());
@@ -83,7 +89,7 @@ describe('webhook', () => {
       .send(raw);
   };
 
-  beforeEach(() => api().post('/users/create-order').send({ formData: registrationForm() }));
+  beforeEach(() => api().post('/users/create-order').send({ formData: workingForm() }));
 
   it('marks the candidate paid on payment.captured', async () => {
     const res = await send('payment.captured', { payment: { entity: { id: 'pay_W1', order_id: 'order_TEST1', method: 'upi' } } });

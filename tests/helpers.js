@@ -43,6 +43,10 @@ const registrationForm = (overrides = {}) => ({
   ...overrides,
 });
 
+/** A working professional: students must upload an ID, which only the multipart route carries. */
+const workingForm = (overrides = {}) =>
+  registrationForm({ collegeOrWorking: 'Working', companyName: 'Acme', college: '', course: '', year: '', ...overrides });
+
 const eventPayload = (overrides = {}) => ({
   name: 'Vanabhojanam 2026',
   date: '2026-11-08',
@@ -61,4 +65,4 @@ async function createEvent(headers, overrides) {
 
 const sign = (secret, payload) => crypto.createHmac('sha256', secret).update(payload).digest('hex');
 
-module.exports = { startDb, stopDb, clearDb, api, adminHeader, registrationForm, sign, createEvent, eventPayload };
+module.exports = { startDb, stopDb, clearDb, api, adminHeader, registrationForm, workingForm, sign, createEvent, eventPayload };
