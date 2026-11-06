@@ -26,6 +26,7 @@ router.get('/verify-payment/:id', publicLimiter, controller.paymentStatus);
 
 // Admin tools.
 router.post('/check-pending-payments', ...admin, controller.checkPending);
+router.get('/admin/payments-audit', ...admin, validate({ query: schemas.eventQuery }), controller.audit);
 router.get('/force-check-payment/:candidateId', ...admin, validate({ params: idParam('candidateId') }), controller.forceCheck);
 
 module.exports = router;

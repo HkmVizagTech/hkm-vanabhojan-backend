@@ -1,5 +1,6 @@
 const Candidate = require('../models/Candidate');
 const payments = require('../services/payment.service');
+const paymentAudit = require('../services/paymentAudit.service');
 const candidates = require('../services/candidate.service');
 const { handleWebhook } = require('../services/webhook.service');
 const ApiError = require('../utils/ApiError');
@@ -91,6 +92,10 @@ exports.checkPending = async (req, res) => {
     message: `Checked ${result.totalChecked} pending payments, updated ${result.totalUpdated}`,
     ...result,
   });
+};
+
+exports.audit = async (req, res) => {
+  res.json({ status: 'success', ...(await paymentAudit.audit({ event: req.query.event })) });
 };
 
 exports.forceCheck = async (req, res) => {
