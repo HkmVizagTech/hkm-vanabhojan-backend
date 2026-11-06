@@ -87,6 +87,10 @@ async function markPaid(candidateId, { payment, paymentId, source }) {
   );
   if (!updated) return { candidate: await Candidate.findById(candidateId), changed: false };
 
+  // Nobody needs to check a working professional (or a cash-desk student), so paying is the approval.
+  if (!qrDelivery.needsIdVerification(updated)) {
+    await Candidate.updateOne({ _id: updated._id, adminAction: null }, { $set: { adminAction: ADMIN_ACTIONS.ACCEPTED, adminActionDate: new Date() } });
+  }
   await whatsapp.notifyRegistrationConfirmed(updated);
   // Online students get their QR once an admin approves their ID; everyone else gets it straight after the confirmation.
   if (!qrDelivery.needsIdVerification(updated)) await qrDelivery.deliverPass(updated);

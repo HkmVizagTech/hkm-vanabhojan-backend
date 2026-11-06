@@ -66,6 +66,8 @@ async function register({ checkIn, ...formData }, staff) {
     paymentMethod: 'Cash',
     paymentDate: now,
     paymentUpdatedBy: 'cash',
+    adminAction: 'Accepted', // taken in person: nothing further to approve
+    adminActionDate: now,
     receipt: `cash_${now.getTime()}_${crypto.randomBytes(2).toString('hex')}`,
     collectedBy: staff.email,
     collectedByName: staff.name,

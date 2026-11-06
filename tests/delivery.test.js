@@ -34,7 +34,7 @@ describe('who gets the QR, and when', () => {
     await pay(await pending({ collegeOrWorking: 'Working' }));
     expect(mockConfirm).toHaveBeenCalledTimes(1);
     expect(mockSendPass).toHaveBeenCalledTimes(1);
-    expect((await Candidate.findOne()).qrSendStatus).toBe('sent');
+    expect(await Candidate.findOne()).toMatchObject({ qrSendStatus: 'sent', adminAction: 'Accepted' });
   });
 
   it('records a failed QR send so it can be retried, without losing the confirmation', async () => {
@@ -49,6 +49,7 @@ describe('who gets the QR, and when', () => {
     await pay(student);
     expect(mockSendPass).not.toHaveBeenCalled();
     expect(mockConfirm).toHaveBeenCalledTimes(1);
+    expect((await Candidate.findOne()).adminAction).toBeNull(); // waits for the admin
 
     await candidates.accept(student._id);
     expect(mockSendPass).toHaveBeenCalledTimes(1);
