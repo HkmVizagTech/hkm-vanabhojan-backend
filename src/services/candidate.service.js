@@ -52,8 +52,34 @@ async function paymentStatusFor(id) {
   };
 }
 
+/**
+ * The entry QR of one paid registration, for an admin to show or resend when someone loses theirs.
+ * An online student's QR is only available once their ID is approved.
+ */
+async function qrFor(id) {
+  const candidate = await findOrFail(id);
+  if (candidate.paymentStatus !== PAYMENT_STATUS.PAID) throw ApiError.badRequest('Payment is not completed: no QR for this registration');
+  if (qrDelivery.needsIdVerification(candidate) && candidate.adminAction !== ADMIN_ACTIONS.ACCEPTED) {
+    throw ApiError.badRequest("Approve the student's ID first: the QR is issued after approval");
+  }
+  const { ensureToken } = require('./attendance.service'); // lazy: attendance.service depends on this module
+  return ensureToken(candidate);
+}
+
+async function sendQr(id) {
+  const candidate = await qrFor(id);
+  const outcome = await qrDelivery.deliverPass(candidate);
+  return { candidate: await Candidate.findById(candidate._id), outcome };
+}
+
+/** Only students have an ID to approve; working professionals get their QR automatically when they pay. */
+const assertStudent = candidate => {
+  if (candidate.collegeOrWorking !== 'College') throw ApiError.badRequest('Only student registrations are approved or rejected');
+};
+
 async function accept(id) {
   const candidate = await findOrFail(id);
+  assertStudent(candidate);
   Object.assign(candidate, { adminAction: ADMIN_ACTIONS.ACCEPTED, adminActionDate: new Date() });
   await candidate.save();
   await whatsapp.notifyAccepted(candidate);
@@ -68,6 +94,7 @@ async function accept(id) {
  */
 async function reject(id) {
   const candidate = await findOrFail(id);
+  assertStudent(candidate);
   Object.assign(candidate, { adminAction: ADMIN_ACTIONS.REJECTED, adminActionDate: new Date() });
   await candidate.save();
   await whatsapp.notifyRejected(candidate);
@@ -119,4 +146,4 @@ async function sendReminders(time) {
   return { total: paid.length, valid: results.filter(r => r.status === 'sent').length, results };
 }
 
-module.exports = { eventFilter, findOrFail, list, paymentStatusFor, accept, reject, refund, update, remove, removeByName, sendReminders };
+module.exports = { qrFor, sendQr, eventFilter, findOrFail, list, paymentStatusFor, accept, reject, refund, update, remove, removeByName, sendReminders };

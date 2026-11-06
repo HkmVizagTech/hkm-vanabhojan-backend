@@ -56,6 +56,35 @@ describe('who gets the QR, and when', () => {
   });
 });
 
+describe('admin QR: show and resend', () => {
+  it('issues the QR of a paid working professional and resends it', async () => {
+    const worker = await pending({ collegeOrWorking: 'Working', paymentStatus: 'Paid', paymentMethod: 'upi' });
+    const person = await candidates.qrFor(worker._id);
+    expect(person.attendanceToken).toBeTruthy();
+    const result = await candidates.sendQr(worker._id);
+    expect(result.outcome.ok).toBe(true);
+    expect(mockSendPass).toHaveBeenCalledTimes(1);
+  });
+
+  it('holds back an unapproved student, and an unpaid registration', async () => {
+    const student = await pending({ collegeOrWorking: 'College', paymentStatus: 'Paid', paymentMethod: 'upi' });
+    await expect(candidates.qrFor(student._id)).rejects.toThrow(/approve the student/i);
+    await candidates.accept(student._id);
+    expect((await candidates.qrFor(student._id)).attendanceToken).toBeTruthy();
+
+    const unpaid = await pending({ collegeOrWorking: 'Working' });
+    await expect(candidates.qrFor(unpaid._id)).rejects.toThrow(/payment is not completed/i);
+  });
+});
+
+describe('accept and reject are for students only', () => {
+  it('refuses to accept or reject a working professional', async () => {
+    const worker = await pending({ collegeOrWorking: 'Working', paymentStatus: 'Paid' });
+    await expect(candidates.accept(worker._id)).rejects.toThrow(/only student/i);
+    await expect(candidates.reject(worker._id)).rejects.toThrow(/only student/i);
+  });
+});
+
 describe('rejecting a student', () => {
   const paidStudent = overrides => pending({ collegeOrWorking: 'College', paymentStatus: 'Paid', paymentMethod: 'upi', paymentId: 'pay_X', ...overrides });
 

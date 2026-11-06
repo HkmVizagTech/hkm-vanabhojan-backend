@@ -36,6 +36,20 @@ exports.removeByName = async (req, res) => {
   res.json({ status: 'success', message: `Deleted ${deletedCount} candidates`, deletedCount });
 };
 
+exports.qr = async (req, res) => {
+  const { attendanceToken, name } = await candidates.qrFor(req.params.candidateId);
+  res.json({ status: 'success', name, attendanceToken });
+};
+
+exports.sendQr = async (req, res) => {
+  const { candidate, outcome } = await candidates.sendQr(req.params.candidateId);
+  res.status(outcome.ok ? 200 : 502).json({
+    status: outcome.ok ? 'success' : 'error',
+    message: outcome.ok ? 'QR sent on WhatsApp' : `QR could not be sent: ${outcome.error}`,
+    data: await present(candidate),
+  });
+};
+
 exports.accept = async (req, res) => {
   const data = await present(await candidates.accept(req.params.candidateId));
   res.json({ status: 'success', message: 'Candidate accepted successfully', data });

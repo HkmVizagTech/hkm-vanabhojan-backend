@@ -13,6 +13,8 @@ const staff = [authenticate, requireRole(ROLES.ADMIN, ROLES.USER)];
 router.get('/', ...admin, validate({ query: schemas.listQuery }), controller.list);
 router.post('/send', ...admin, validate({ body: schemas.reminderBody }), controller.sendReminders);
 
+router.get('/admin/qr/:candidateId', ...admin, validate({ params: idParam('candidateId') }), controller.qr);
+router.post('/admin/send-qr/:candidateId', ...admin, validate({ params: idParam('candidateId') }), controller.sendQr);
 router.post('/admin/accept/:candidateId', ...admin, validate({ params: idParam('candidateId') }), controller.accept);
 router.post('/admin/reject/:candidateId', ...admin, validate({ params: idParam('candidateId') }), controller.reject);
 router.post('/admin/refund/:candidateId', ...admin, validate({ params: idParam('candidateId') }), controller.refund);
