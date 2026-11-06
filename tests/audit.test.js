@@ -3,8 +3,10 @@ const Candidate = require('../src/models/Candidate');
 
 // What Razorpay "holds" for each order, keyed by order id.
 let mockOrders = {};
+let mockOthers = [];
 jest.mock('../src/config/razorpay', () => ({
   getRazorpay: () => ({
+    payments: { all: async () => ({ items: [...mockOthers] }) },
     orders: {
       fetchPayments: async id => {
         if (mockOrders[id] === 'error') throw new Error('Razorpay down');
@@ -22,6 +24,7 @@ let event;
 beforeEach(async () => {
   await clearDb();
   mockOrders = {};
+  mockOthers = [];
   headers = await adminHeader();
   event = await createEvent(headers);
 });
@@ -38,6 +41,19 @@ describe('Razorpay audit', () => {
     mockOrders = { order_A: [captured('pay_A', 100)], order_B: [captured('pay_B', 250)] };
     const result = await audit();
     expect(result).toMatchObject({ matches: true, difference: 0, dashboard: { paidOnline: 350 }, razorpay: { captured: 350, refunded: 0, net: 350 }, issues: [] });
+  });
+
+  it('reports fees, net to bank, repairs a missing payment link-up and counts unrelated payments', async () => {
+    const a = await person('A', 'order_A');
+    await person('B', 'order_B', { paymentAmount: 250, paymentId: 'pay_B' });
+    mockOrders = { order_A: [captured('pay_A', 100, { fee: 236 })], order_B: [captured('pay_B', 250, { fee: 590 })] };
+    mockOthers = [captured('pay_donation', 500, { fee: 1180 }), captured('pay_A', 100), captured('pay_seva', 1001)];
+    const result = await audit();
+    expect(result.razorpay).toMatchObject({ payments: 2, captured: 350, fees: 8.26, netToBank: 341.74 });
+    expect(result.repaired).toBe(1); // A had no payment id stored
+    expect((await Candidate.findById(a._id)).paymentId).toBe('pay_A');
+    expect(result.otherPayments).toBe(2); // the donation and the other seva, not our own pay_A
+    expect(result.matches).toBe(true);
   });
 
   it('keeps cash out of the Razorpay comparison', async () => {

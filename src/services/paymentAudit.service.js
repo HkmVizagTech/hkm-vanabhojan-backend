@@ -57,13 +57,25 @@ function compare(candidate, payment, lookupError) {
   return null;
 }
 
+/** Every captured payment on the Razorpay account in a time window (Unix seconds), paginated. Used to count unrelated ones. */
+async function capturedInRange(razorpay, from, to) {
+  const all = [];
+  const count = 100;
+  for (let skip = 0; skip <= 5000; skip += count) {
+    const page = await razorpay.payments.all({ from, to, count, skip });
+    all.push(...page.items.filter(p => p.status === 'captured' || p.status === 'refunded'));
+    if (page.items.length < count) break;
+  }
+  return all;
+}
+
 /**
  * Checks the dashboard against Razorpay: totals side by side, and every registration that disagrees.
  * Only online payments can be checked; cash taken at the desk is reported separately.
  */
 async function audit({ event } = {}) {
   const scope = await candidates.eventFilter(event);
-  const everyone = await Candidate.find(scope).select('name whatsappNumber paymentStatus paymentAmount paymentMethod paymentId orderId');
+  const everyone = await Candidate.find(scope).select('name whatsappNumber paymentStatus paymentAmount paymentMethod paymentId orderId registrationDate createdAt');
   const cash = everyone.filter(c => c.paymentStatus === PAYMENT_STATUS.PAID && c.paymentMethod === 'Cash');
   const online = everyone.filter(c => c.orderId);
   const razorpay = getRazorpay();
@@ -79,12 +91,34 @@ async function audit({ event } = {}) {
   });
 
   const settled = lookups.filter(l => l.payment);
+
+  // Repair: a payment that Razorpay holds for our order, whose id we never stored (a missed webhook), gets linked up.
+  let repaired = 0;
+  for (const { candidate, payment } of settled) {
+    if (candidate.paymentId === payment.id) continue;
+    const result = await Candidate.updateOne({ _id: candidate._id, $or: [{ paymentId: null }, { paymentId: '' }] }, { $set: { paymentId: payment.id } });
+    repaired += result.modifiedCount;
+  }
+
+  // Context only: other payments on the same Razorpay account (donations, other projects) are not ours.
+  let otherPayments = null;
+  if (online.length) {
+    try {
+      const from = Math.floor(Math.min(...everyone.map(c => new Date(c.registrationDate || c.createdAt).getTime())) / 1000) - 86400;
+      const ours = new Set(settled.map(l => l.payment.id));
+      otherPayments = (await capturedInRange(razorpay, from, Math.floor(Date.now() / 1000))).filter(p => !ours.has(p.id)).length;
+    } catch (error) {
+      logger.warn({ err: error.message }, 'Audit: could not count other Razorpay payments');
+    }
+  }
+
   const issues = lookups.map(l => compare(l.candidate, l.payment, l.error)).filter(Boolean);
 
   const dashboardPaid = sum(online.filter(c => c.paymentStatus === PAYMENT_STATUS.PAID), c => c.paymentAmount);
   const capturedPaise = sum(settled, l => l.payment.amount);
   const refundedTotalPaise = sum(settled, l => refundedPaise(l.payment));
   const razorpayNet = rupees(capturedPaise - refundedTotalPaise);
+  const feesPaise = sum(settled, l => l.payment.fee);
 
   return {
     checkedAt: new Date(),
@@ -94,7 +128,16 @@ async function audit({ event } = {}) {
       refunded: sum(online.filter(c => c.paymentStatus === PAYMENT_STATUS.REFUNDED), c => c.paymentAmount),
       cash: sum(cash, c => c.paymentAmount),
     },
-    razorpay: { captured: rupees(capturedPaise), refunded: rupees(refundedTotalPaise), net: razorpayNet },
+    razorpay: {
+      payments: settled.length,
+      captured: rupees(capturedPaise),
+      refunded: rupees(refundedTotalPaise),
+      net: razorpayNet,
+      fees: rupees(feesPaise), // Razorpay's fee including GST
+      netToBank: rupees(capturedPaise - refundedTotalPaise - feesPaise),
+    },
+    repaired,
+    otherPayments,
     difference: Math.round((dashboardPaid - razorpayNet) * 100) / 100,
     matches: issues.length === 0 && dashboardPaid === razorpayNet,
     issues,
