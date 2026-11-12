@@ -26,6 +26,32 @@ describe('create-order', () => {
     expect(saved).toMatchObject({ paymentAmount: 1200, paymentStatus: 'Pending', whatsappNumber: '919876543210' });
   });
 
+  it('closes earlier unfinished attempts once the person has paid, and refuses a second registration', async () => {
+    mockCreate.mockImplementation(async opts => ({ id: `order_${mockCreate.mock.calls.length}`, amount: opts.amount, currency: 'INR' }));
+    mockCreate.mockClear();
+    await api().post('/users/create-order').send({ formData: workingForm() }); // order_1, left unfinished
+    await api().post('/users/create-order').send({ formData: workingForm() }); // order_2, paid
+    expect(await Candidate.countDocuments({ paymentStatus: 'Pending' })).toBe(2);
+
+    const second = await Candidate.findOne({ orderId: 'order_2' });
+    await payments.markPaid(second._id, { paymentId: 'pay_2', source: 'manual' });
+    const first = await Candidate.findOne({ orderId: 'order_1' });
+    expect(first).toMatchObject({ paymentStatus: 'Failed', paymentFailureReason: expect.stringMatching(/replaced/i) });
+    expect(await Candidate.countDocuments({ paymentStatus: 'Pending' })).toBe(0);
+
+    const again = await api().post('/users/create-order').send({ formData: workingForm({ name: 'ARJUN rao' }) });
+    expect(again.status).toBe(409);
+    expect(again.body.message).toMatch(/already registered/i);
+    expect(mockCreate).toHaveBeenCalledTimes(2); // no third Razorpay order was created
+  });
+
+  it('lets a family share a number: a different name is a different person', async () => {
+    const first = await api().post('/users/create-order').send({ formData: workingForm() });
+    await payments.markPaid((await Candidate.findOne({ orderId: first.body.id }))._id, { paymentId: 'pay_F', source: 'manual' });
+    const sibling = await api().post('/users/create-order').send({ formData: workingForm({ name: 'Sita Rao' }) });
+    expect(sibling.status).toBe(200);
+  });
+
   it('refuses a student registration that has no ID card', async () => {
     const res = await api().post('/users/create-order').send({ formData: registrationForm() });
     expect(res.status).toBe(400);

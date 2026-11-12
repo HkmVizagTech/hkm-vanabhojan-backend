@@ -6,7 +6,7 @@ const { env, integrations } = require('../config/env');
 const { PAYMENT_STATUS, ADMIN_ACTIONS } = require('../config/constants');
 const events = require('./event.service');
 const ApiError = require('../utils/ApiError');
-const { toPaise } = require('../utils/text');
+const { toPaise, escapeRegex } = require('../utils/text');
 const logger = require('../utils/logger');
 const whatsapp = require('./whatsapp.service');
 const qrDelivery = require('./qrDelivery.service');
@@ -31,9 +31,19 @@ const verifyWebhookSignature = (rawBody, signature) =>
  * Creates the Razorpay order and the Pending candidate that goes with it.
  * The fee comes from the current event and the candidate type on the server; any amount sent by the client is ignored.
  */
+/** Same person for the same event: one WhatsApp number can still cover a family, so the name has to match too. */
+const samePerson = (event, c) => ({
+  event: event._id || event,
+  whatsappNumber: c.whatsappNumber,
+  name: new RegExp(`^${escapeRegex(String(c.name).trim())}$`, 'i'),
+});
+
 async function createOrder({ formData, file }) {
   if (file && !integrations.storage) throw ApiError.unavailable('File storage is not configured');
   const event = await events.currentOpenEvent();
+  if (await Candidate.exists({ ...samePerson(event, formData), paymentStatus: PAYMENT_STATUS.PAID })) {
+    throw ApiError.conflict('You are already registered with this number. Your QR is sent to your WhatsApp; please contact us if you did not receive it.');
+  }
   const rupees = events.feeFor(event, formData.collegeOrWorking);
   const receipt = `rcpt_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
 
@@ -86,6 +96,13 @@ async function markPaid(candidateId, { payment, paymentId, source }) {
     { new: true }
   );
   if (!updated) return { candidate: await Candidate.findById(candidateId), changed: false };
+
+  // Earlier unfinished attempts by the same person are no longer waiting: close them so they stop showing as Pending.
+  // Marked Failed (not deleted) so that a late payment on an old order can still be matched and refunded.
+  await Candidate.updateMany(
+    { ...samePerson(updated.event, updated), _id: { $ne: updated._id }, paymentStatus: PAYMENT_STATUS.PENDING },
+    { $set: { paymentStatus: PAYMENT_STATUS.FAILED, paymentFailureReason: 'Replaced by a later successful payment', paymentUpdatedBy: source } }
+  );
 
   // Nobody needs to check a working professional (or a cash-desk student), so paying is the approval.
   if (!qrDelivery.needsIdVerification(updated)) {
