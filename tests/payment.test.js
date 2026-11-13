@@ -39,6 +39,13 @@ describe('create-order', () => {
     expect(first).toMatchObject({ paymentStatus: 'Failed', paymentFailureReason: expect.stringMatching(/replaced/i) });
     expect(await Candidate.countDocuments({ paymentStatus: 'Pending' })).toBe(0);
 
+    // The admin list shows the person once: the leftover Failed attempt is hidden, even when filtering by Failed.
+    const headers = await adminHeader();
+    const shown = await api().get('/users').set(headers);
+    expect(shown.body.candidates.map(c => c.paymentStatus)).toEqual(['Paid']);
+    const failedOnly = await api().get('/users?paymentStatus=Failed').set(headers);
+    expect(failedOnly.body.candidates).toHaveLength(0);
+
     const again = await api().post('/users/create-order').send({ formData: workingForm({ name: 'ARJUN rao' }) });
     expect(again.status).toBe(409);
     expect(again.body.message).toMatch(/already registered/i);

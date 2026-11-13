@@ -22,7 +22,22 @@ async function eventFilter(event) {
   return current ? { event: current._id } : {};
 }
 
-const list = filter => Candidate.find(filter).select('-razorpayPaymentData').sort({ registrationDate: -1 });
+const personKey = c => `${c.event}|${c.whatsappNumber}|${String(c.name).trim().toLowerCase()}`;
+
+/**
+ * The registrations an admin sees. Someone whose payment failed and then succeeded has two rows; the leftover
+ * Pending/Failed attempts of a person who has since paid are hidden (kept in the database so a late payment on
+ * an old order can still be matched and refunded).
+ */
+async function list(filter) {
+  const rows = await Candidate.find(filter).select('-razorpayPaymentData').sort({ registrationDate: -1 });
+  const { paymentStatus: _ignored, ...scope } = filter;
+  const paidRows = await Candidate.find({ ...scope, paymentStatus: { $in: [PAYMENT_STATUS.PAID, PAYMENT_STATUS.REFUNDED] } }).select('event whatsappNumber name');
+  const settled = new Set(paidRows.map(personKey));
+  const leftover = c =>
+    (c.paymentStatus === PAYMENT_STATUS.FAILED || c.paymentStatus === PAYMENT_STATUS.PENDING) && settled.has(personKey(c));
+  return rows.filter(c => !leftover(c));
+}
 
 /** Public payment-status lookup used by the thank-you page; exposes only what that page shows. */
 async function paymentStatusFor(id) {
