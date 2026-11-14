@@ -22,7 +22,18 @@ async function eventFilter(event) {
   return current ? { event: current._id } : {};
 }
 
-const personKey = c => `${c.event}|${c.whatsappNumber}|${String(c.name).trim().toLowerCase()}`;
+const nameWords = name => String(name).toLowerCase().split(/[^a-z0-9\u0900-\u0dff]+/i).filter(Boolean);
+// An initial ("B") matches any word starting with it ("Balaka"); a full word must match exactly.
+const wordMatches = (a, b) => a === b || (a.length === 1 && b.startsWith(a)) || (b.length === 1 && a.startsWith(b));
+
+/** Same person spelled differently: "B.Sanjana joshitha" and "Sanjana joshitha Balaka". Needs two matching words, so relatives sharing a surname stay apart. */
+function sameName(x, y) {
+  const [short, long] = [nameWords(x), nameWords(y)].sort((m, n) => m.length - n.length);
+  if (!short.length) return false;
+  if (short.length === long.length && short.every((w, i) => w === long[i])) return true;
+  return short.length >= 2 && short.every(w => long.some(l => wordMatches(w, l)));
+}
+const phoneKey = c => `${c.event}|${c.whatsappNumber}`;
 
 /**
  * The registrations an admin sees. Someone whose payment failed and then succeeded has two rows; the leftover
@@ -33,9 +44,11 @@ async function list(filter) {
   const rows = await Candidate.find(filter).select('-razorpayPaymentData').sort({ registrationDate: -1 });
   const { paymentStatus: _ignored, ...scope } = filter;
   const paidRows = await Candidate.find({ ...scope, paymentStatus: { $in: [PAYMENT_STATUS.PAID, PAYMENT_STATUS.REFUNDED] } }).select('event whatsappNumber name');
-  const settled = new Set(paidRows.map(personKey));
+  const paidBy = new Map();
+  paidRows.forEach(c => paidBy.set(phoneKey(c), [...(paidBy.get(phoneKey(c)) || []), c.name]));
   const leftover = c =>
-    (c.paymentStatus === PAYMENT_STATUS.FAILED || c.paymentStatus === PAYMENT_STATUS.PENDING) && settled.has(personKey(c));
+    (c.paymentStatus === PAYMENT_STATUS.FAILED || c.paymentStatus === PAYMENT_STATUS.PENDING) &&
+    (paidBy.get(phoneKey(c)) || []).some(name => sameName(name, c.name));
   return rows.filter(c => !leftover(c));
 }
 

@@ -52,6 +52,16 @@ describe('create-order', () => {
     expect(mockCreate).toHaveBeenCalledTimes(2); // no third Razorpay order was created
   });
 
+  it('hides failed attempts under a differently spelled name, but not a relative with the same surname', async () => {
+    const headers = await adminHeader();
+    const event = (await Candidate.findOne()) || null;
+    const ev = event ? event.event : (await api().get('/events').set(headers)).body.events?.[0]?._id;
+    const row = (name, paymentStatus, n) => ({ ...registrationForm(), name, collegeOrWorking: 'Working', paymentStatus, orderId: `o_${n}`, event: ev, whatsappNumber: '919281247355', paymentAmount: 600 });
+    await Candidate.create([row('Sanjana joshitha Balaka', 'Failed', 1), row('B.Sanjana joshitha', 'Paid', 2), row('Sanjana Rao', 'Failed', 3), row('Anil Balaka', 'Failed', 4)]);
+    const names = (await api().get('/users').set(headers)).body.candidates.map(c => c.name).sort();
+    expect(names).toEqual(['Anil Balaka', 'B.Sanjana joshitha', 'Sanjana Rao']);
+  });
+
   it('lets a family share a number: a different name is a different person', async () => {
     const first = await api().post('/users/create-order').send({ formData: workingForm() });
     await payments.markPaid((await Candidate.findOne({ orderId: first.body.id }))._id, { paymentId: 'pay_F', source: 'manual' });
