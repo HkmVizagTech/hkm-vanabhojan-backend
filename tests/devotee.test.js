@@ -56,6 +56,10 @@ describe('devotee sign-in', () => {
     expect((await app.get('/users').set(viewer)).status).toBe(200);
     expect((await app.get('/users/attendance-list?event=all').set(viewer)).status).toBe(200);
     expect((await app.get('/events').set(viewer)).status).toBe(200);
+    expect((await app.post('/college').set(viewer).send({ name: 'New College' })).status).toBe(201);
+    const college = (await app.get('/college')).body.find?.(c => c.name === 'New College') || (await app.get('/college')).body.colleges?.[0];
+    expect((await app.delete(`/college/${college._id}`).set(viewer)).status).toBe(403);
+    expect((await app.put(`/college/${college._id}`).set(viewer).send({ name: 'Renamed' })).status).toBe(403);
     expect((await app.post('/users/admin/accept/64b000000000000000000001').set(viewer)).status).toBe(403);
     expect((await app.get('/admin/devotees').set(viewer)).status).toBe(403);
     expect((await app.get('/admin/users').set(viewer)).status).toBe(403);
