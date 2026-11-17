@@ -27,6 +27,7 @@ const schema = z.object({
   // Template names Meta has approved ("all" or a comma-separated list); see src/config/whatsapp.js.
   WA_APPROVED_TEMPLATES: z.string().default('all'),
   // Name of the approved follow-up template (vb_followup1 once approved). Empty keeps follow-ups switched off.
+  WA_TEMPLATE_OTP: z.string().default('otp'), // approved authentication template for the devotee sign-in code
   WA_TEMPLATE_FOLLOWUP: z.string().default(''),
 
   // Cloudflare R2 (S3-compatible object storage) for student ID cards and certificates.

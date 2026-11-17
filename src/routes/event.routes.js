@@ -4,7 +4,7 @@ const { authenticate, requireRole } = require('../middlewares/auth');
 const { validate } = require('../middlewares/validate');
 const { eventBody, followupQuery, followupSendBody } = require('../validators/event');
 const { idParam } = require('../validators/common');
-const { ROLES } = require('../config/constants');
+const { ROLES, VIEWER_ROLE } = require('../config/constants');
 
 const router = Router();
 const admin = [authenticate, requireRole(ROLES.ADMIN)];
@@ -12,7 +12,7 @@ const staff = [authenticate, requireRole(ROLES.ADMIN, ROLES.USER)];
 
 router.get('/current', controller.current); // public: drives the registration site
 
-router.get('/', ...staff, controller.list);
+router.get('/', authenticate, requireRole(ROLES.ADMIN, ROLES.USER, VIEWER_ROLE), controller.list);
 router.get('/analytics', ...admin, controller.analytics);
 router.get('/followup', ...admin, validate({ query: followupQuery }), controller.followup);
 router.post('/followup/send', ...admin, validate({ body: followupSendBody }), controller.sendFollowup);

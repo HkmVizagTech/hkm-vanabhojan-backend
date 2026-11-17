@@ -22,6 +22,12 @@ class ApiError extends Error {
   static conflict(message) {
     return new ApiError(409, message);
   }
+  static tooMany(message) {
+    return new ApiError(429, message);
+  }
+  static badGateway(message) {
+    return new ApiError(502, message);
+  }
   static unavailable(message) {
     return new ApiError(503, message);
   }

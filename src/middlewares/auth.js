@@ -1,6 +1,8 @@
 const jwt = require('jsonwebtoken');
 const { env } = require('../config/env');
 const User = require('../models/User');
+const Devotee = require('../models/Devotee');
+const { VIEWER_ROLE } = require('../config/constants');
 const ApiError = require('../utils/ApiError');
 
 const bearerToken = req => {
@@ -18,6 +20,13 @@ async function authenticate(req, _res, next) {
     payload = jwt.verify(token, env.JWT_SECRET);
   } catch {
     throw ApiError.forbidden('Invalid or expired token');
+  }
+
+  if (payload.kind === 'devotee') {
+    const devotee = await Devotee.findById(payload.id);
+    if (!devotee || !devotee.active) throw ApiError.forbidden('This devotee is no longer on the list');
+    req.user = { id: devotee._id.toString(), name: devotee.name, role: VIEWER_ROLE, isSuperAdmin: false, canCollectCash: false };
+    return next();
   }
 
   const user = await User.findById(payload.id);

@@ -203,11 +203,11 @@ async function attendanceReport({ date, status, event }) {
     const end = new Date(`${date}T23:59:59.999`);
     query.attendanceDate = { $gte: start, $lte: end };
   }
-  const candidates = await Candidate.find(query)
+  const rows = await Candidate.find(query)
     .select('name email whatsappNumber college course attendance attendanceDate')
     .sort({ attendanceDate: -1 });
-  const present = candidates.filter(c => c.attendance).length;
-  return { status: 'success', summary: { total: candidates.length, present, absent: candidates.length - present }, candidates };
+  const present = rows.filter(c => c.attendance).length;
+  return { status: 'success', summary: { total: rows.length, present, absent: rows.length - present }, candidates: rows };
 }
 
 module.exports = { ensureToken, awaitingVerification, getQrCodes, markByPhone, scan, listScanned, attendanceReport };

@@ -4,13 +4,14 @@ const { authenticate, requireRole } = require('../middlewares/auth');
 const { validate } = require('../middlewares/validate');
 const schemas = require('../validators/candidate');
 const { idParam } = require('../validators/common');
-const { ROLES } = require('../config/constants');
+const { ROLES, VIEWER_ROLE } = require('../config/constants');
 
 const router = Router();
 const admin = [authenticate, requireRole(ROLES.ADMIN)];
+const viewer = [authenticate, requireRole(ROLES.ADMIN, VIEWER_ROLE)];
 const staff = [authenticate, requireRole(ROLES.ADMIN, ROLES.USER)];
 
-router.get('/', ...admin, validate({ query: schemas.listQuery }), controller.list);
+router.get('/', ...viewer, validate({ query: schemas.listQuery }), controller.list);
 router.post('/send', ...admin, validate({ body: schemas.reminderBody }), controller.sendReminders);
 
 router.get('/admin/qr/:candidateId', ...admin, validate({ params: idParam('candidateId') }), controller.qr);
