@@ -17,6 +17,7 @@ const base = {
   course: optionalText(100),
   year: optionalText(10),
   companyName: optionalText(200),
+  area: text(100).min(1, 'Area is required'),
 };
 
 /** Students need college/course/year; everyone else needs a company. */
@@ -54,6 +55,7 @@ const cashRegistration = z.object({
   course: optionalText(100),
   year: optionalText(10),
   companyName: optionalText(200),
+  area: optionalText(100), // optional at the cash desk
   checkIn: z.boolean().default(false),
 });
 
@@ -93,6 +95,7 @@ const adminUpdate = z
     course: z.string().trim().max(100),
     year: z.string().trim().max(10),
     companyName: z.string().trim().max(200),
+    area: z.string().trim().max(100),
   })
   .partial()
   .refine(v => Object.keys(v).length > 0, 'Nothing to update');

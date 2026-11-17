@@ -39,6 +39,7 @@ const registrationForm = (overrides = {}) => ({
   college: 'GITAM',
   course: 'B.Tech',
   year: '2',
+  area: 'MVP Colony',
   howDidYouKnow: 'Instagram Reel',
   ...overrides,
 });

@@ -19,6 +19,7 @@ const candidateSchema = new Schema(
     course: String,
     year: String,
     companyName: String,
+    area: { type: String, trim: true }, // where in the city they live
 
     registrationDate: { type: Date, default: Date.now, index: true },
 
