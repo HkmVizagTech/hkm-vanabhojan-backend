@@ -51,3 +51,7 @@ revenue, returning people) and `GET /events/followup` lists people from one edit
 
 Dashboard > Webhooks > URL `https://<host>/users/webhook`, secret = `RAZORPAY_WEBHOOK_SECRET`, events
 `payment.captured`, `payment.failed`, `refund.processed`, `refund.failed`.
+
+## Integration API (other HKM sites)
+
+`GET /integrations/attendees[?event=<id>][&who=attended|paid]` returns `{ count, attendees: [{ name, phone }] }` (phone = plain 10 digits, one entry per number). Auth: header `x-api-key` = `INTEGRATION_API_KEY` (empty = endpoint off). Used by Yatra Clubbing for returning-attendee pricing.

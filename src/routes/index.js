@@ -8,6 +8,7 @@ const candidate = require('./candidate.routes');
 const event = require('./event.routes');
 const cash = require('./cash.routes');
 const devotee = require('./devotee.routes');
+const integration = require('./integration.routes');
 
 const router = Router();
 
@@ -16,6 +17,7 @@ router.use('/admin/devotees', devotee.admin);
 router.use('/devotee-auth', devotee.auth);
 router.use('/college', college);
 router.use('/events', event);
+router.use('/integrations', integration);
 // All mounted at /users; the `/:id` routes live in `candidate` and must stay last.
 router.use('/users', payment);
 router.use('/users', cash);

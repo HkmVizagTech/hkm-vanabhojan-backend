@@ -5,3 +5,4 @@ process.env.RAZORPAY_KEY_ID = 'rzp_test_key';
 process.env.RAZORPAY_KEY_SECRET = 'rzp_test_secret';
 process.env.RAZORPAY_WEBHOOK_SECRET = 'whsec_test';
 process.env.ENABLE_PAYMENT_CRON = 'false';
+process.env.INTEGRATION_API_KEY = process.env.INTEGRATION_API_KEY || 'test-integration-key';

@@ -40,6 +40,10 @@ const schema = z.object({
   // Public base URL of the certificates bucket: the r2.dev URL or a custom domain, no trailing slash.
   R2_PUBLIC_URL: z.string().default(''),
 
+  // Shared secret for other HKM sites that need to read who attended (e.g. Yatra Clubbing, for
+  // returning-attendee pricing). Sent as the "x-api-key" header. Empty = the integration API is off.
+  INTEGRATION_API_KEY: z.string().default(''),
+
   ENABLE_PAYMENT_CRON: bool.default(true),
   PAYMENT_CRON_SCHEDULE: z.string().default('*/2 * * * *'),
   PAYMENT_CRON_BATCH: z.coerce.number().int().positive().default(50),
