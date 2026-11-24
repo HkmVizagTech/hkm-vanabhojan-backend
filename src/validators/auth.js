@@ -11,10 +11,11 @@ const register = z.object({
   password: z.string().min(8, 'Password must be at least 8 characters').max(128),
   role: z.enum(Object.values(ROLES)).optional(),
   canCollectCash: z.boolean().optional(),
+  canScan: z.boolean().optional(),
 });
 
 const updateUser = z
-  .object({ active: z.boolean(), role: z.enum(Object.values(ROLES)), canCollectCash: z.boolean() })
+  .object({ active: z.boolean(), role: z.enum(Object.values(ROLES)), canCollectCash: z.boolean(), canScan: z.boolean() })
   .partial()
   .refine(v => Object.keys(v).length > 0, 'Nothing to update');
 

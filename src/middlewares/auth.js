@@ -25,7 +25,7 @@ async function authenticate(req, _res, next) {
   if (payload.kind === 'devotee') {
     const devotee = await Devotee.findById(payload.id);
     if (!devotee || !devotee.active) throw ApiError.forbidden('This devotee is no longer on the list');
-    req.user = { id: devotee._id.toString(), name: devotee.name, role: VIEWER_ROLE, isSuperAdmin: false, canCollectCash: false };
+    req.user = { id: devotee._id.toString(), name: devotee.name, role: VIEWER_ROLE, kind: 'devotee', isSuperAdmin: false, canCollectCash: false, canScan: false };
     return next();
   }
 
@@ -33,7 +33,7 @@ async function authenticate(req, _res, next) {
   if (!user) throw ApiError.unauthorized('User no longer exists');
   if (user.active === false) throw ApiError.forbidden('This account has been disabled');
 
-  req.user = { id: user._id.toString(), email: user.email, role: user.role, name: user.name, isSuperAdmin: Boolean(user.isSuperAdmin), canCollectCash: Boolean(user.canCollectCash) };
+  req.user = { id: user._id.toString(), email: user.email, role: user.role, name: user.name, isSuperAdmin: Boolean(user.isSuperAdmin), kind: 'staff', canCollectCash: Boolean(user.canCollectCash), canScan: Boolean(user.canScan) };
   next();
 }
 
@@ -58,4 +58,12 @@ const requireCashAccess = (req, _res, next) => {
   next();
 };
 
-module.exports = { authenticate, authenticateOptional, requireRole, requireCashAccess };
+/** Volunteers and admins always may; a view-only account only when an admin gave it the scanner. */
+const requireScanAccess = (req, _res, next) => {
+  if (!req.user) throw ApiError.unauthorized();
+  const { role, canScan } = req.user;
+  if (role !== 'admin' && role !== 'user' && !(role === 'viewer' && canScan)) throw ApiError.forbidden('You do not have scanner access');
+  next();
+};
+
+module.exports = { authenticate, authenticateOptional, requireRole, requireCashAccess, requireScanAccess };

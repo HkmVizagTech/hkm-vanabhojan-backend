@@ -15,7 +15,7 @@ const signToken = user => jwt.sign({ id: user.id, role: user.role }, env.JWT_SEC
  * Creates a staff account. The very first account becomes the super admin (bootstrap);
  * afterwards only an authenticated admin may create accounts, and only the super admin may create admins.
  */
-async function register({ name, email, password, role, canCollectCash }, actor) {
+async function register({ name, email, password, role, canCollectCash, canScan }, actor) {
   const isFirstUser = !(await User.exists({}));
   if (!isFirstUser && actor?.role !== ROLES.ADMIN) throw ApiError.forbidden('Only an admin can create accounts');
   if (!isFirstUser && role === ROLES.ADMIN && !actor.isSuperAdmin) {
@@ -31,6 +31,7 @@ async function register({ name, email, password, role, canCollectCash }, actor) 
     role: isFirstUser ? ROLES.ADMIN : role || ROLES.USER,
     isSuperAdmin: isFirstUser,
     canCollectCash: Boolean(canCollectCash),
+    canScan: Boolean(canScan),
   });
 }
 

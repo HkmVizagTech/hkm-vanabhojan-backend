@@ -1,6 +1,6 @@
 const { Router } = require('express');
 const controller = require('../controllers/candidate.controller');
-const { authenticate, requireRole } = require('../middlewares/auth');
+const { authenticate, requireRole, requireScanAccess } = require('../middlewares/auth');
 const { validate } = require('../middlewares/validate');
 const schemas = require('../validators/candidate');
 const { idParam } = require('../validators/common');
@@ -9,7 +9,7 @@ const { ROLES, VIEWER_ROLE } = require('../config/constants');
 const router = Router();
 const admin = [authenticate, requireRole(ROLES.ADMIN)];
 const viewer = [authenticate, requireRole(ROLES.ADMIN, VIEWER_ROLE)];
-const staff = [authenticate, requireRole(ROLES.ADMIN, ROLES.USER)];
+const staff = [authenticate, requireScanAccess];
 
 router.get('/', ...viewer, validate({ query: schemas.listQuery }), controller.list);
 router.post('/send', ...admin, validate({ body: schemas.reminderBody }), controller.sendReminders);

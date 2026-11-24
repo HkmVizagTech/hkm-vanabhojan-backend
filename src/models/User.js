@@ -13,6 +13,8 @@ const userSchema = new mongoose.Schema(
     isSuperAdmin: { type: Boolean, default: false },
     // Volunteers with this may use the Cash desk: register walk-ins, take cash, issue QR passes.
     canCollectCash: { type: Boolean, default: false },
+    // View-only accounts with this may also use the QR scanner and the scanned list (volunteers always can).
+    canScan: { type: Boolean, default: false },
   },
   { versionKey: false, timestamps: true }
 );

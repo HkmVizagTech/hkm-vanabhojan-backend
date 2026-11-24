@@ -104,3 +104,31 @@ describe('disabled accounts', () => {
     expect((await login('gate@example.com')).status).toBe(200);
   });
 });
+
+describe('view-only staff accounts', () => {
+  it('can look but not change, and gets the scanner or cash desk only when an admin allows it', async () => {
+    const { owner } = await setup();
+    const mk = (email, extra) => app().post('/admin/users/register').set(owner).send({ name: 'View', email, password: PASSWORD, role: 'viewer', ...extra });
+    expect((await mk('v1@example.com')).status).toBe(201);
+    const plain = (await login('v1@example.com')).headers;
+
+    expect((await app().get('/users').set(plain)).status).toBe(200);
+    expect((await app().get('/users/attendance-list?event=all').set(plain)).status).toBe(200);
+    expect((await app().post('/users/admin/accept/64b000000000000000000001').set(plain)).status).toBe(403);
+    expect((await app().get('/admin/users').set(plain)).status).toBe(403);
+    expect((await app().get('/users/admin/scanned-list').set(plain)).status).toBe(403);
+    expect((await app().get('/users/cash').set(plain)).status).toBe(403);
+
+    const created = await mk('v2@example.com', { canScan: true, canCollectCash: true });
+    const full = (await login('v2@example.com')).headers;
+    expect(created.body.user.canScan).toBe(true);
+    expect((await app().get('/users/admin/scanned-list').set(full)).status).not.toBe(403);
+    expect((await app().get('/users/cash').set(full)).status).toBe(200);
+    expect((await app().post('/users/admin/accept/64b000000000000000000001').set(full)).status).toBe(403);
+
+    // The admin can take the scanner away again.
+    const v2 = created.body.user;
+    await app().patch(`/admin/users/${v2.id || v2._id}`).set(owner).send({ canScan: false });
+    expect((await app().get('/users/admin/scanned-list').set(full)).status).toBe(403);
+  });
+});

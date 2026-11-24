@@ -1,6 +1,6 @@
 const authService = require('../services/auth.service');
 
-const publicUser = u => ({ id: u.id, email: u.email, role: u.role, name: u.name, isSuperAdmin: Boolean(u.isSuperAdmin), canCollectCash: Boolean(u.canCollectCash) });
+const publicUser = u => ({ id: u.id, email: u.email, role: u.role, name: u.name, isSuperAdmin: Boolean(u.isSuperAdmin), kind: u.kind || 'staff', canCollectCash: Boolean(u.canCollectCash), canScan: Boolean(u.canScan) });
 
 exports.register = async (req, res) => {
   const user = await authService.register(req.body, req.user);
@@ -9,7 +9,7 @@ exports.register = async (req, res) => {
 
 exports.login = async (req, res) => {
   const { token, user } = await authService.login(req.body);
-  res.json({ status: 'success', message: 'login success', token, id: user.id, role: user.role, name: user.name, isSuperAdmin: Boolean(user.isSuperAdmin), canCollectCash: Boolean(user.canCollectCash) });
+  res.json({ status: 'success', message: 'login success', token, id: user.id, role: user.role, name: user.name, isSuperAdmin: Boolean(user.isSuperAdmin), canCollectCash: Boolean(user.canCollectCash), canScan: Boolean(user.canScan) });
 };
 
 exports.validateToken = (req, res) => {

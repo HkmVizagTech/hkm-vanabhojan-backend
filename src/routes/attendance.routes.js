@@ -1,13 +1,13 @@
 const { Router } = require('express');
 const controller = require('../controllers/attendance.controller');
-const { authenticate, requireRole } = require('../middlewares/auth');
+const { authenticate, requireRole, requireScanAccess } = require('../middlewares/auth');
 const { validate } = require('../middlewares/validate');
 const { publicLimiter } = require('../middlewares/rateLimit');
 const schemas = require('../validators/candidate');
 const { ROLES, VIEWER_ROLE } = require('../config/constants');
 
 const router = Router();
-const staff = [authenticate, requireRole(ROLES.ADMIN, ROLES.USER)];
+const staff = [authenticate, requireScanAccess];
 
 router.post('/get-qr-codes', publicLimiter, validate({ body: schemas.phoneBody }), controller.getQrCodes);
 

@@ -1,8 +1,9 @@
 const CANDIDATE_TYPES = Object.freeze({ COLLEGE: 'College', WORKING: 'Working' });
 const PAYMENT_STATUS = Object.freeze({ PENDING: 'Pending', PAID: 'Paid', FAILED: 'Failed', REFUNDED: 'Refunded' });
-const ROLES = Object.freeze({ ADMIN: 'admin', USER: 'user' });
-// Devotees signed in by WhatsApp code: read-only. Not part of ROLES, so no staff account can be given it.
-const VIEWER_ROLE = 'viewer';
+// 'viewer' is look-only: devotees signed in by WhatsApp code, and staff accounts an admin made view-only.
+// An admin can additionally give a staff viewer the scanner (canScan) and/or the cash desk (canCollectCash).
+const ROLES = Object.freeze({ ADMIN: 'admin', USER: 'user', VIEWER: 'viewer' });
+const VIEWER_ROLE = ROLES.VIEWER;
 const ADMIN_ACTIONS = Object.freeze({ ACCEPTED: 'Accepted', REJECTED: 'Rejected', REFUNDED: 'Refunded' });
 
 const PAYMENT_SOURCES = Object.freeze([
