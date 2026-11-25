@@ -1,6 +1,9 @@
 const crypto = require('node:crypto');
 const Candidate = require('../models/Candidate');
-const { PAYMENT_STATUS, ADMIN_ACTIONS, REGISTRATION_URL } = require('../config/constants');
+const Counter = require('../models/Counter');
+const whatsapp = require('./whatsapp.service');
+const logger = require('../utils/logger');
+const { PAYMENT_STATUS, ADMIN_ACTIONS, REGISTRATION_URL, TEAMS } = require('../config/constants');
 const ApiError = require('../utils/ApiError');
 const candidates = require('./candidate.service');
 const qrDelivery = require('./qrDelivery.service');
@@ -23,6 +26,30 @@ async function ensureToken(candidate) {
     { new: true }
   );
   return updated || (await Candidate.findById(candidate._id));
+}
+
+/**
+ * Puts a male student in the next team (Krishna, Balaram, ... then round again) and thanks them on WhatsApp.
+ * Runs on the first scan only; the team is stored so a re-scan never moves anyone. Never throws.
+ */
+async function assignTeam(candidate) {
+  try {
+    if (candidate.gender !== 'Male' || candidate.collegeOrWorking !== 'College' || candidate.team) return candidate;
+    const key = `team:${candidate.event || 'none'}`;
+    const { seq } = await Counter.findOneAndUpdate({ _id: key }, { $inc: { seq: 1 } }, { new: true, upsert: true });
+    const team = TEAMS[(seq - 1) % TEAMS.length];
+    const updated = await Candidate.findOneAndUpdate({ _id: candidate._id, team: null }, { $set: { team } }, { new: true });
+    if (!updated) return await Candidate.findById(candidate._id);
+    // Not awaited: the gate screen must show the team at once, whatever WhatsApp is doing.
+    whatsapp
+      .notifyTeamWelcome(updated)
+      .then(sent => sent.ok && Candidate.updateOne({ _id: updated._id }, { $set: { teamNotifiedAt: new Date() } }))
+      .catch(error => logger.warn({ candidateId: updated._id, err: error.message }, 'Team message not recorded'));
+    return updated;
+  } catch (error) {
+    logger.warn({ candidateId: candidate._id, err: error.message }, 'Team not assigned');
+    return candidate;
+  }
 }
 
 /** Every Paid registration under one WhatsApp number, or the right error when there is none. */
@@ -117,6 +144,7 @@ const memberView = (member, scannedId, wasAlreadyScanned) => ({
   email: member.email,
   phone: member.whatsappNumber,
   gender: member.gender,
+  team: member.team,
   college: orgOf(member),
   course: member.course,
   year: member.year,
@@ -153,7 +181,8 @@ async function scan(token, staff) {
     { new: true }
   );
   const wasAlreadyScanned = !marked;
-  const scanned = marked || candidate;
+  let scanned = marked || candidate;
+  if (marked) scanned = await assignTeam(marked);
 
   const family = await Candidate.find({
     whatsappNumber: scanned.whatsappNumber,
@@ -175,6 +204,7 @@ async function scan(token, staff) {
       email: scanned.email,
       phone: scanned.whatsappNumber,
       gender: scanned.gender,
+      team: scanned.team,
       college: orgOf(scanned),
       course: scanned.course,
       year: scanned.year,

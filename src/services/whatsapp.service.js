@@ -82,6 +82,10 @@ const notifyAccepted = candidate =>
     params: [name(candidate)],
   });
 
+/** Thank-you sent after the gate scan, naming the attendee's team. */
+const notifyTeamWelcome = candidate =>
+  send({ candidate, kind: 'team_welcome', template: TEMPLATES.TEAM_WELCOME, params: [name(candidate), candidate.team] });
+
 const notifyRejected = candidate => send({ candidate, kind: 'reject', template: TEMPLATES.REJECTED, params: [name(candidate)] });
 
 const sendReminder = async (candidate, time) =>
@@ -91,4 +95,4 @@ const sendReminder = async (candidate, time) =>
 const sendTemplateTo = ({ phone, template, params, kind }) =>
   send({ candidate: { _id: phone, whatsappNumber: phone }, kind, template, params });
 
-module.exports = { send, name, sendTemplateTo, notifyRegistrationConfirmed, notifyAccepted, notifyRejected, sendReminder };
+module.exports = { send, name, sendTemplateTo, notifyRegistrationConfirmed, notifyAccepted, notifyTeamWelcome, notifyRejected, sendReminder };

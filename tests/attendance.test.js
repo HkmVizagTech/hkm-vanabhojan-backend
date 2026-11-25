@@ -132,3 +132,38 @@ describe('colleges', () => {
     expect((await app.post('/college/bulk').send({ names: ['X'] })).status).toBe(401);
   });
 });
+
+describe('team assignment at the gate', () => {
+  const whatsapp = require('../src/services/whatsapp.service');
+  const { TEAMS } = require('../src/config/constants');
+  let spy;
+  beforeEach(() => { spy = jest.spyOn(whatsapp, 'notifyTeamWelcome').mockResolvedValue({ ok: true }); });
+  afterEach(() => spy.mockRestore());
+
+  const scanOf = async c => {
+    const { attendanceToken } = await require('../src/services/attendance.service').ensureToken(c);
+    return api().post('/users/admin/attendance-scan').set(await adminHeader()).send({ token: attendanceToken });
+  };
+
+  it('gives males the next team in order, wraps after eight, and never moves them on a re-scan', async () => {
+    const men = [];
+    for (let i = 0; i < 9; i++) men.push(await paid(`Man ${i}`, { collegeOrWorking: 'College', paymentMethod: 'Cash', whatsappNumber: `91900000000${i}` }));
+    const teams = [];
+    for (const m of men) teams.push((await scanOf(m)).body.data.team);
+    expect(teams).toEqual([...TEAMS, TEAMS[0]]);
+    expect((await scanOf(men[2])).body.data.team).toBe('Nitai');
+    expect(spy).toHaveBeenCalledTimes(9);
+  });
+
+  it('leaves working professionals without a team or a message', async () => {
+    const res = await scanOf(await paid('Worker', { collegeOrWorking: 'Working', companyName: 'Acme', college: '' }));
+    expect(res.body.data.team).toBeUndefined();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('leaves females without a team or a message', async () => {
+    const res = await scanOf(await paid('Sita', { gender: 'Female', collegeOrWorking: 'College', paymentMethod: 'Cash' }));
+    expect(res.body.data.team).toBeUndefined();
+    expect(spy).not.toHaveBeenCalled();
+  });
+});

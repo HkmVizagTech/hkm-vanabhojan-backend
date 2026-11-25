@@ -61,6 +61,8 @@ const candidateSchema = new Schema(
     adminAttendance: { type: Boolean, default: false },
     adminAttendanceDate: Date,
     adminAttendanceBy: String,
+    team: String, // Vanabhojanam team, given to male attendees at their first scan
+    teamNotifiedAt: Date,
 
     // student id card (Cloudflare R2)
     studentIdCardKey: String, // object key in R2; a short-lived signed URL is produced on read

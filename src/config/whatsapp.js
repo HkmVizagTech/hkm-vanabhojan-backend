@@ -10,6 +10,7 @@ const TEMPLATES = Object.freeze({
   ACCEPTED_FEMALE: 'vb_accepted_female',
   REJECTED: 'vb_rejected',
   REMINDER: 'vb_reminder',
+  TEAM_WELCOME: 'vb_team_welcome',
   QR_PASS: 'vb_qr_pass',
   CERTIFICATE: 'vb_certificate',
 });
