@@ -3,7 +3,7 @@ const Candidate = require('../models/Candidate');
 const Counter = require('../models/Counter');
 const whatsapp = require('./whatsapp.service');
 const logger = require('../utils/logger');
-const { PAYMENT_STATUS, ADMIN_ACTIONS, REGISTRATION_URL, TEAMS } = require('../config/constants');
+const { PAYMENT_STATUS, ADMIN_ACTIONS, REGISTRATION_URL, TEAMS_BY_GENDER } = require('../config/constants');
 const ApiError = require('../utils/ApiError');
 const candidates = require('./candidate.service');
 const qrDelivery = require('./qrDelivery.service');
@@ -29,15 +29,17 @@ async function ensureToken(candidate) {
 }
 
 /**
- * Puts a male student in the next team (Krishna, Balaram, ... then round again) and thanks them on WhatsApp.
+ * Puts a student in the next team for their gender (boys: Krishna, Balaram, ...; girls: Radha, Lakshmi, ...; then round again) and thanks them on WhatsApp.
  * Runs on the first scan only; the team is stored so a re-scan never moves anyone. Never throws.
  */
 async function assignTeam(candidate) {
   try {
-    if (candidate.gender !== 'Male' || candidate.collegeOrWorking !== 'College' || candidate.team) return candidate;
-    const key = `team:${candidate.event || 'none'}`;
+    const teams = TEAMS_BY_GENDER[candidate.gender];
+    if (!teams || candidate.collegeOrWorking !== 'College' || candidate.team) return candidate;
+    // The boys' counter keeps its original key so yesterday's rotation carries on.
+    const key = `team:${candidate.gender === 'Male' ? '' : 'female:'}${candidate.event || 'none'}`;
     const { seq } = await Counter.findOneAndUpdate({ _id: key }, { $inc: { seq: 1 } }, { new: true, upsert: true });
-    const team = TEAMS[(seq - 1) % TEAMS.length];
+    const team = teams[(seq - 1) % teams.length];
     const updated = await Candidate.findOneAndUpdate({ _id: candidate._id, team: null }, { $set: { team } }, { new: true });
     if (!updated) return await Candidate.findById(candidate._id);
     // Not awaited: the gate screen must show the team at once, whatever WhatsApp is doing.

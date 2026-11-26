@@ -155,14 +155,22 @@ describe('team assignment at the gate', () => {
     expect(spy).toHaveBeenCalledTimes(9);
   });
 
-  it('leaves working professionals without a team or a message', async () => {
-    const res = await scanOf(await paid('Worker', { collegeOrWorking: 'Working', companyName: 'Acme', college: '' }));
-    expect(res.body.data.team).toBeUndefined();
-    expect(spy).not.toHaveBeenCalled();
+  it('gives female students the girls teams on their own rotation, wrapping after four', async () => {
+    const { TEAMS_BY_GENDER } = require('../src/config/constants');
+    const teams = [];
+    for (let i = 0; i < 5; i++) {
+      const g = await paid(`Girl ${i}`, { gender: 'Female', collegeOrWorking: 'College', paymentMethod: 'Cash', whatsappNumber: `91800000000${i}` });
+      teams.push((await scanOf(g)).body.data.team);
+    }
+    const girls = TEAMS_BY_GENDER.Female;
+    expect(teams).toEqual([...girls, girls[0]]);
+    expect(girls).toEqual(['Radha', 'Lakshmi', 'Rukmini', 'Tulasi']);
+    const boy = await paid('Boy', { collegeOrWorking: 'College', paymentMethod: 'Cash', whatsappNumber: '919700000000' });
+    expect((await scanOf(boy)).body.data.team).toBe('Krishna');
   });
 
-  it('leaves females without a team or a message', async () => {
-    const res = await scanOf(await paid('Sita', { gender: 'Female', collegeOrWorking: 'College', paymentMethod: 'Cash' }));
+  it('leaves working professionals without a team or a message', async () => {
+    const res = await scanOf(await paid('Worker', { collegeOrWorking: 'Working', companyName: 'Acme', college: '' }));
     expect(res.body.data.team).toBeUndefined();
     expect(spy).not.toHaveBeenCalled();
   });

@@ -16,9 +16,13 @@ const PAYMENT_SOURCES = Object.freeze([
   'cash',
 ]);
 
-// Male attendees are placed in these teams, in order, as they are scanned at the gate.
-const TEAMS = Object.freeze(['Krishna', 'Balaram', 'Nitai', 'Gauranga', 'Rama', 'Narsimha', 'Madanmohan', 'Radharani']);
+// Students are placed in these teams, in order, as they are scanned at the gate. Each gender rotates on its own.
+const TEAMS_BY_GENDER = Object.freeze({
+  Male: Object.freeze(['Krishna', 'Balaram', 'Nitai', 'Gauranga', 'Rama', 'Narsimha', 'Madanmohan', 'Radharani']),
+  Female: Object.freeze(['Radha', 'Lakshmi', 'Rukmini', 'Tulasi']),
+});
+const TEAMS = TEAMS_BY_GENDER.Male;
 
 const REGISTRATION_URL = 'https://youthfest.harekrishnavizag.org/';
 
-module.exports = { CANDIDATE_TYPES, PAYMENT_STATUS, ROLES, VIEWER_ROLE, ADMIN_ACTIONS, PAYMENT_SOURCES, REGISTRATION_URL, TEAMS };
+module.exports = { CANDIDATE_TYPES, PAYMENT_STATUS, ROLES, VIEWER_ROLE, ADMIN_ACTIONS, PAYMENT_SOURCES, REGISTRATION_URL, TEAMS, TEAMS_BY_GENDER };
