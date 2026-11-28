@@ -44,3 +44,49 @@ describe('GET /integrations/attendees', () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe('GET /integrations/person', () => {
+  const get = (phone) => api().get('/integrations/person?phone=' + phone).set('x-api-key', env.INTEGRATION_API_KEY);
+
+  it('needs the API key and a valid number', async () => {
+    expect((await api().get('/integrations/person?phone=9876543210')).status).toBe(401);
+    expect((await get('123')).status).toBe(400);
+  });
+
+  it('unknown number -> found:false', async () => {
+    const res = await get('9876543210');
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ found: false, attended: false, person: null });
+  });
+
+  it('known but never scanned in -> found, NOT attended, details to pre-fill', async () => {
+    await person('Meena Rao', '919876543210', { gender: 'Female', college: 'AU', course: 'B.Tech', year: '3rd Year', dob: new Date('2004-01-01') });
+    const res = await get('9876543210');
+    expect(res.body.found).toBe(true);
+    expect(res.body.attended).toBe(false);
+    expect(res.body.person).toMatchObject({ name: 'Meena Rao', gender: 'Female', college: 'AU', course: 'B.Tech', year: '3rd Year' });
+    expect(res.body.person.age).toBeGreaterThan(15);
+  });
+
+  it('paid and scanned in (either way) -> attended', async () => {
+    await person('Arjun', '919876543210', { attendance: true });
+    expect((await get('9876543210')).body.attended).toBe(true);
+    await person('Sita', '919123456780', { adminAttendance: true });
+    expect((await get('9123456780')).body.attended).toBe(true);
+  });
+
+  it('scanned in but never paid does not count as attended', async () => {
+    await person('Unpaid', '919000000002', { attendance: true, paymentStatus: 'Pending' });
+    const res = await get('9000000002');
+    expect(res.body.found).toBe(true);
+    expect(res.body.attended).toBe(false);
+  });
+
+  it('shares only what the form needs (no email, dob, ID or payment data)', async () => {
+    await person('Arjun', '919876543210', { email: 'a@b.com', dob: new Date('2003-05-05'), studentIdCardKey: 'secret/key' });
+    const res = await get('9876543210');
+    expect(Object.keys(res.body.person).sort()).toEqual(['age', 'college', 'course', 'gender', 'name', 'year']);
+    const text = JSON.stringify(res.body);
+    for (const leak of ['a@b.com', 'secret/key', 'paymentAmount']) expect(text.includes(leak)).toBe(false);
+  });
+});

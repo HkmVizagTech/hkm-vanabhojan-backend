@@ -41,4 +41,56 @@ router.get('/attendees', publicLimiter, requireIntegrationKey, async (req, res) 
   res.json({ status: 'success', count: byPhone.size, attendees: [...byPhone.values()] });
 });
 
+/**
+ * GET /integrations/person?phone=<10 digits>
+ *
+ * One person, looked up by mobile number, for Yatra Clubbing's registration form:
+ *   { found, attended, person: { name, gender, age, college, course, year } }
+ *
+ *   found     — this number has a registration here (any edition)
+ *   attended  — they paid AND were scanned in / marked present at some edition
+ *   person    — details to pre-fill the form, taken from their newest PAID registration
+ *               (or newest registration if none paid). Only what the form needs: no email,
+ *               no date of birth, no ID card, no payment data.
+ */
+router.get('/person', publicLimiter, requireIntegrationKey, async (req, res) => {
+  const phone = String(req.query.phone || '').replace(/D/g, '').slice(-10);
+  if (!/^[6-9][0-9]{9}$/.test(phone)) throw ApiError.badRequest('phone must be a 10-digit mobile number');
+
+  const rows = await Candidate.find({ whatsappNumber: { $in: ['91' + phone, phone, '+91' + phone] } })
+    .select('name gender dob college course year collegeOrWorking paymentStatus attendance adminAttendance registrationDate')
+    .sort({ registrationDate: -1 })
+    .lean();
+
+  if (rows.length === 0) return res.json({ status: 'success', found: false, attended: false, person: null });
+
+  const paid = rows.filter(r => r.paymentStatus === PAYMENT_STATUS.PAID);
+  const attended = paid.some(r => r.attendance === true || r.adminAttendance === true);
+  const src = paid[0] || rows[0];
+
+  let age = null;
+  if (src.dob) {
+    const d = new Date(src.dob);
+    if (!Number.isNaN(d.getTime())) {
+      const now = new Date();
+      age = now.getFullYear() - d.getFullYear() - (now < new Date(now.getFullYear(), d.getMonth(), d.getDate()) ? 1 : 0);
+      if (age < 5 || age > 90) age = null;
+    }
+  }
+
+  res.json({
+    status: 'success',
+    found: true,
+    attended,
+    person: {
+      name: src.name || '',
+      gender: src.gender || '',
+      age,
+      college: src.collegeOrWorking === 'Working' ? '' : (src.college || ''),
+      course: src.course || '',
+      year: src.year || '',
+    },
+  });
+});
+
 module.exports = router;
