@@ -1,5 +1,5 @@
 const { z } = require('zod');
-const { CANDIDATE_TYPES, PAYMENT_STATUS } = require('../config/constants');
+const { CANDIDATE_TYPES, PAYMENT_STATUS, MAX_FAMILY_MEMBERS } = require('../config/constants');
 const { phone } = require('./common');
 
 const text = max => z.string().trim().max(max);
@@ -20,10 +20,22 @@ const base = {
   area: text(100).min(1, 'Area is required'),
 };
 
+/** Extra people covered by the same payment and QR. Only name and gender are needed. */
+const familyMember = z.object({
+  name: text(100).min(1, 'Name is required for every family member'),
+  gender: z.enum(['Male', 'Female', 'Other'], { error: 'Please select gender for every family member' }),
+});
+const familyMembers = z.array(familyMember).max(MAX_FAMILY_MEMBERS, `You can add up to ${MAX_FAMILY_MEMBERS} family members`).optional().default([]);
+
 /** Students need college/course/year; everyone else needs a company. */
 const withRegistrationRules = schema =>
   schema.superRefine((v, ctx) => {
     const need = (field, message) => ctx.addIssue({ code: 'custom', path: [field], message });
+    if (v.familyMembers?.length) {
+      if (v.collegeOrWorking === CANDIDATE_TYPES.COLLEGE) need('familyMembers', 'Students register one person at a time');
+      const names = [v.name, ...v.familyMembers.map(m => m.name)].map(n => n.trim().toLowerCase());
+      if (new Set(names).size !== names.length) need('familyMembers', 'Each person in the group needs a different name');
+    }
     if (v.collegeOrWorking === CANDIDATE_TYPES.COLLEGE) {
       if (!v.college) need('college', 'College name is required');
       if (!v.course) need('course', 'Course is required');
@@ -34,7 +46,7 @@ const withRegistrationRules = schema =>
   });
 
 /** Body of a registration. The price is derived from collegeOrWorking, never taken from the client. */
-const registration = withRegistrationRules(z.object(base));
+const registration = withRegistrationRules(z.object({ ...base, familyMembers }));
 
 const blankToUndefined = v => (typeof v === 'string' && v.trim() === '' ? undefined : v);
 

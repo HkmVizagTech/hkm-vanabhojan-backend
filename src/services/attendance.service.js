@@ -71,7 +71,8 @@ async function paidRegistrationsFor(rawNumber, paymentMessage) {
 /** QR codes a person shows at the gate. Read-only: viewing a QR never marks attendance. */
 async function getQrCodes(rawNumber) {
   const everyone = await paidRegistrationsFor(rawNumber, 'Payment not completed. QR codes cannot be generated.');
-  const paid = everyone.filter(c => !awaitingVerification(c));
+  // Family members share the payer's QR, so they get none of their own.
+  const paid = everyone.filter(c => !awaitingVerification(c) && !c.groupLeadId);
   if (!paid.length) {
     throw ApiError.forbidden('Your student ID is being verified. We will send your QR on WhatsApp as soon as our team approves it.');
   }
@@ -109,7 +110,7 @@ async function markByPhone(rawNumber) {
   const candidates = [];
 
   for (const registration of paid) {
-    let c = await ensureToken(registration);
+    let c = registration.groupLeadId ? registration : await ensureToken(registration);
     const alreadyMarked = c.attendance === true;
     if (!alreadyMarked) {
       c = await Candidate.findByIdAndUpdate(c._id, { $set: { attendance: true, attendanceDate: new Date() } }, { new: true });
@@ -140,7 +141,7 @@ async function markByPhone(rawNumber) {
   };
 }
 
-const memberView = (member, scannedId, wasAlreadyScanned) => ({
+const memberView = (member, scannedId, wasAlreadyScanned, justMarked = new Set()) => ({
   id: member._id,
   name: member.name,
   email: member.email,
@@ -154,7 +155,7 @@ const memberView = (member, scannedId, wasAlreadyScanned) => ({
   adminAttendance: member.adminAttendance || false,
   adminAttendanceDate: member.adminAttendanceDate,
   wasJustScanned: member._id.equals(scannedId),
-  wasAlreadyScanned: member._id.equals(scannedId) ? wasAlreadyScanned : Boolean(member.adminAttendance),
+  wasAlreadyScanned: member._id.equals(scannedId) ? wasAlreadyScanned : Boolean(member.adminAttendance) && !justMarked.has(String(member._id)),
 });
 
 /**
@@ -183,6 +184,17 @@ async function scan(token, staff) {
     { new: true }
   );
   const wasAlreadyScanned = !marked;
+  // One QR covers the whole family: scanning it marks everyone who came with the payer.
+  const justMarked = new Set();
+  if (marked) {
+    const waiting = await Candidate.find({ groupLeadId: candidate._id, adminAttendance: { $ne: true } }).select('_id');
+    waiting.forEach(m => justMarked.add(String(m._id)));
+    await Candidate.updateMany(
+      { _id: { $in: waiting.map(m => m._id) } },
+      { $set: { adminAttendance: true, adminAttendanceDate: now, adminAttendanceBy: staff?.email, attendance: true, attendanceDate: now } }
+    );
+  }
+  const familyMarked = justMarked.size;
   let scanned = marked || candidate;
   if (marked) scanned = await assignTeam(marked);
 
@@ -199,7 +211,7 @@ async function scan(token, staff) {
       : `Attendance marked successfully for ${scanned.name}`,
     totalMembers: family.length,
     scannedPerson: scanned.name,
-    newlyScanned: wasAlreadyScanned ? 0 : 1,
+    newlyScanned: wasAlreadyScanned ? 0 : 1 + familyMarked,
     data: {
       id: scanned._id,
       name: scanned.name,
@@ -214,7 +226,7 @@ async function scan(token, staff) {
       adminAttendanceDate: scanned.adminAttendanceDate,
       wasAlreadyScanned,
     },
-    familyMembers: family.map(member => memberView(member, scanned._id, wasAlreadyScanned)),
+    familyMembers: family.map(member => memberView(member, scanned._id, wasAlreadyScanned, justMarked)),
   };
 }
 

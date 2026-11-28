@@ -23,6 +23,9 @@ const TEAMS_BY_GENDER = Object.freeze({
 });
 const TEAMS = TEAMS_BY_GENDER.Male;
 
+// A working professional can register family members in the same payment: the person plus up to this many others.
+const MAX_FAMILY_MEMBERS = 5;
+
 const REGISTRATION_URL = 'https://youthfest.harekrishnavizag.org/';
 
-module.exports = { CANDIDATE_TYPES, PAYMENT_STATUS, ROLES, VIEWER_ROLE, ADMIN_ACTIONS, PAYMENT_SOURCES, REGISTRATION_URL, TEAMS, TEAMS_BY_GENDER };
+module.exports = { CANDIDATE_TYPES, PAYMENT_STATUS, ROLES, VIEWER_ROLE, ADMIN_ACTIONS, PAYMENT_SOURCES, REGISTRATION_URL, TEAMS, TEAMS_BY_GENDER, MAX_FAMILY_MEMBERS };

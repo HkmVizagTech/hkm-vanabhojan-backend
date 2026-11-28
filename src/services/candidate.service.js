@@ -154,6 +154,7 @@ async function update(id, changes) {
 async function remove(id) {
   const candidate = await Candidate.findByIdAndDelete(id);
   if (!candidate) throw ApiError.notFound('Candidate not found');
+  await Candidate.deleteMany({ groupLeadId: candidate._id }); // the family came with this payment
   return candidate;
 }
 

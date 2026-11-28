@@ -161,3 +161,66 @@ describe('admin guard', () => {
     expect((await api().post('/users/check-pending-payments').set(headers)).status).toBe(200);
   });
 });
+
+describe('family registration (working professionals)', () => {
+  const family = [{ name: 'Sita Rao', gender: 'Female' }, { name: 'Ram Rao', gender: 'Male' }];
+
+  it('charges every person, keeps the family off the books until paid, then creates them on payment', async () => {
+    const solo = await api().post('/users/create-order').send({ formData: workingForm({ name: 'Solo Person', whatsappNumber: '9000000001' }) });
+    const fee = mockCreate.mock.calls[0][0].amount;
+    expect(solo.status).toBe(200);
+    mockCreate.mockClear();
+
+    const res = await api().post('/users/create-order').send({ formData: workingForm({ familyMembers: family }) });
+    expect(res.status).toBe(200);
+    expect(mockCreate.mock.calls[0][0].amount).toBe(fee * 3);
+
+    const lead = await Candidate.findOne({ orderId: 'order_TEST1', name: 'Arjun Rao' });
+    expect(lead.familyMembers.map(m => m.name)).toEqual(['Sita Rao', 'Ram Rao']);
+    expect(await Candidate.countDocuments({ groupLeadId: lead._id })).toBe(0); // nobody else exists before payment
+
+    await payments.markPaid(lead._id, { paymentId: 'pay_G', source: 'manual' });
+    const members = await Candidate.find({ groupLeadId: lead._id }).sort({ name: 1 });
+    expect(members.map(m => [m.name, m.gender, m.paymentStatus, m.paymentAmount])).toEqual([
+      ['Ram Rao', 'Male', 'Paid', 0],
+      ['Sita Rao', 'Female', 'Paid', 0],
+    ]);
+    await payments.markPaid(lead._id, { paymentId: 'pay_G', source: 'webhook' }); // a repeat callback changes nothing
+    expect(await Candidate.countDocuments({ groupLeadId: lead._id })).toBe(2);
+  });
+
+  it('refuses families for students, too many people, repeated names and people already registered', async () => {
+    const post = formData => api().post('/users/create-order').send({ formData });
+    expect((await post(workingForm({ collegeOrWorking: 'College', college: 'GITAM', course: 'B.Tech', year: '2', companyName: '', familyMembers: family }))).status).toBe(400);
+    const six = Array.from({ length: 6 }, (_, i) => ({ name: `Member ${i}`, gender: 'Male' }));
+    expect((await post(workingForm({ familyMembers: six }))).status).toBe(400);
+    expect((await post(workingForm({ familyMembers: [{ name: 'arjun rao', gender: 'Male' }] }))).status).toBe(400);
+    expect((await post(workingForm({ familyMembers: [{ name: 'No Gender' }] }))).status).toBe(400);
+
+    const first = await post(workingForm({ name: 'Sita Rao' }));
+    await payments.markPaid((await Candidate.findOne({ orderId: first.body.id }))._id, { paymentId: 'pay_S', source: 'manual' });
+    expect((await post(workingForm({ familyMembers: [{ name: 'Sita Rao', gender: 'Female' }] }))).status).toBe(409);
+  });
+
+  it('gives the family one QR: only the payer has one, and scanning it marks everyone present', async () => {
+    const res = await api().post('/users/create-order').send({ formData: workingForm({ familyMembers: family }) });
+    const lead = await Candidate.findOne({ orderId: res.body.id });
+    await payments.markPaid(lead._id, { paymentId: 'pay_Q', source: 'manual' });
+
+    const qr = await api().post('/users/get-qr-codes').send({ whatsappNumber: '9876543210' });
+    expect(qr.body.totalCandidates).toBe(1);
+    const token = qr.body.candidates[0].attendanceToken;
+    expect(await Candidate.countDocuments({ attendanceToken: { $ne: null } })).toBe(1);
+
+    const headers = await adminHeader();
+    const scan = await api().post('/users/admin/attendance-scan').set(headers).send({ token });
+    expect(scan.body).toMatchObject({ status: 'success', totalMembers: 3, newlyScanned: 3 });
+    expect(scan.body.familyMembers.map(m => m.name).sort()).toEqual(['Arjun Rao', 'Ram Rao', 'Sita Rao']);
+    expect(scan.body.familyMembers.every(m => m.adminAttendance && !m.wasAlreadyScanned)).toBe(true);
+    expect(await Candidate.countDocuments({ adminAttendance: true })).toBe(3);
+
+    const again = await api().post('/users/admin/attendance-scan').set(headers).send({ token });
+    expect(again.body.status).toBe('already-marked');
+    expect(again.body.familyMembers.every(m => m.wasAlreadyScanned)).toBe(true);
+  });
+});

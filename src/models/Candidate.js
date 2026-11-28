@@ -21,6 +21,11 @@ const candidateSchema = new Schema(
     companyName: String,
     area: { type: String, trim: true }, // where in the city they live
 
+    // Family registration (working professionals only): the person who pays is the lead and holds the one QR.
+    // While payment is Pending the family is kept here; once paid, each one becomes their own Candidate with groupLeadId set.
+    familyMembers: [{ _id: false, name: String, gender: { type: String, enum: ['Male', 'Female', 'Other'] } }],
+    groupLeadId: { type: Schema.Types.ObjectId, ref: 'Candidate', index: true },
+
     registrationDate: { type: Date, default: Date.now, index: true },
 
     // payment

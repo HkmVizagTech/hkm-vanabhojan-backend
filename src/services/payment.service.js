@@ -44,14 +44,21 @@ async function createOrder({ formData, file }) {
   if (await Candidate.exists({ ...samePerson(event, formData), paymentStatus: PAYMENT_STATUS.PAID })) {
     throw ApiError.conflict('You are already registered with this number. Your QR is sent to your WhatsApp; please contact us if you did not receive it.');
   }
-  const rupees = events.feeFor(event, formData.collegeOrWorking);
+  const { familyMembers = [], ...person } = formData;
+  for (const member of familyMembers) {
+    if (await Candidate.exists({ ...samePerson(event, { whatsappNumber: person.whatsappNumber, name: member.name }), paymentStatus: PAYMENT_STATUS.PAID })) {
+      throw ApiError.conflict(`${member.name} is already registered with this number.`);
+    }
+  }
+  const people = 1 + familyMembers.length;
+  const rupees = events.feeFor(event, person.collegeOrWorking) * people; // one payment for the whole group
   const receipt = `rcpt_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
 
   const order = await getRazorpay().orders.create({
     amount: toPaise(rupees),
     currency: 'INR',
     receipt,
-    notes: { name: formData.name, whatsapp: formData.whatsappNumber },
+    notes: { name: person.name, whatsapp: person.whatsappNumber, people: String(people) },
   });
 
   let idCard = {};
@@ -60,7 +67,8 @@ async function createOrder({ formData, file }) {
   }
 
   const candidate = await Candidate.create({
-    ...formData,
+    ...person,
+    familyMembers,
     ...idCard,
     event: event._id,
     registrationDate: new Date(),
@@ -71,6 +79,37 @@ async function createOrder({ formData, file }) {
   });
   logger.info({ candidateId: candidate._id, orderId: order.id }, 'Order created');
   return order;
+}
+
+/**
+ * The people who came with the payer become their own registrations (so lists, reports and attendance count each person)
+ * but share the lead's payment and QR. Called only by the single winner of markPaid; the groupLeadId check keeps it idempotent.
+ */
+async function createFamilyMembers(lead) {
+  if (!lead.familyMembers?.length) return;
+  if (await Candidate.exists({ groupLeadId: lead._id })) return;
+  await Candidate.insertMany(
+    lead.familyMembers.map(member => ({
+      groupLeadId: lead._id,
+      event: lead.event,
+      name: member.name,
+      gender: member.gender,
+      whatsappNumber: lead.whatsappNumber,
+      email: lead.email,
+      area: lead.area,
+      collegeOrWorking: lead.collegeOrWorking,
+      companyName: lead.companyName,
+      registrationDate: lead.registrationDate,
+      paymentStatus: PAYMENT_STATUS.PAID,
+      paymentAmount: 0, // the lead's payment covers everyone
+      paymentId: lead.paymentId,
+      paymentDate: lead.paymentDate,
+      paymentMethod: lead.paymentMethod,
+      paymentUpdatedBy: lead.paymentUpdatedBy,
+      adminAction: ADMIN_ACTIONS.ACCEPTED,
+      adminActionDate: new Date(),
+    }))
+  );
 }
 
 /**
@@ -108,6 +147,7 @@ async function markPaid(candidateId, { payment, paymentId, source }) {
   if (!qrDelivery.needsIdVerification(updated)) {
     await Candidate.updateOne({ _id: updated._id, adminAction: null }, { $set: { adminAction: ADMIN_ACTIONS.ACCEPTED, adminActionDate: new Date() } });
   }
+  await createFamilyMembers(updated);
   await whatsapp.notifyRegistrationConfirmed(updated);
   // Online students get their QR once an admin approves their ID; everyone else gets it straight after the confirmation.
   if (!qrDelivery.needsIdVerification(updated)) await qrDelivery.deliverPass(updated);
@@ -201,6 +241,11 @@ async function refund(candidate) {
     refundDate: new Date(),
   });
   await candidate.save();
+  // A family paid once, so one refund returns the money for all of them.
+  await Candidate.updateMany(
+    { groupLeadId: candidate._id },
+    { $set: { paymentStatus: PAYMENT_STATUS.REFUNDED, adminAction: ADMIN_ACTIONS.REFUNDED, adminActionDate: new Date(), refundId: refundResult.id, refundStatus: 'processed', refundDate: new Date() } }
+  );
   return { candidate, refund: refundResult };
 }
 
