@@ -24,7 +24,7 @@ const TEAMS_BY_GENDER = Object.freeze({
 const TEAMS = TEAMS_BY_GENDER.Male;
 
 // A working professional can register family members in the same payment: the person plus up to this many others.
-const MAX_FAMILY_MEMBERS = 5;
+const MAX_FAMILY_MEMBERS = 9;
 
 const REGISTRATION_URL = 'https://youthfest.harekrishnavizag.org/';
 

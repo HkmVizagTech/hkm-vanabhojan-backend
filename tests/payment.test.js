@@ -192,8 +192,8 @@ describe('family registration (working professionals)', () => {
   it('refuses families for students, too many people, repeated names and people already registered', async () => {
     const post = formData => api().post('/users/create-order').send({ formData });
     expect((await post(workingForm({ collegeOrWorking: 'College', college: 'GITAM', course: 'B.Tech', year: '2', companyName: '', familyMembers: family }))).status).toBe(400);
-    const six = Array.from({ length: 6 }, (_, i) => ({ name: `Member ${i}`, gender: 'Male' }));
-    expect((await post(workingForm({ familyMembers: six }))).status).toBe(400);
+    const tooMany = Array.from({ length: 10 }, (_, i) => ({ name: `Member ${i}`, gender: 'Male' }));
+    expect((await post(workingForm({ familyMembers: tooMany }))).status).toBe(400);
     expect((await post(workingForm({ familyMembers: [{ name: 'arjun rao', gender: 'Male' }] }))).status).toBe(400);
     expect((await post(workingForm({ familyMembers: [{ name: 'No Gender' }] }))).status).toBe(400);
 
